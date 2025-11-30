@@ -7,13 +7,17 @@ A stylish terminal UI for Pulumi Cloud, ESC, and NEO built with Ratatui.
 - **Dashboard**: Overview of your Pulumi resources with quick stats
 - **Stacks View**: Browse and manage your Pulumi stacks with update history
 - **ESC View**: Manage ESC environments, view definitions, and resolve secrets
-- **NEO Chat**: Interactive chat interface for Pulumi's AI agent
-- **Organization Selector**: Switch between organizations on-the-fly with `O`
+- **NEO Chat**: Interactive chat interface for Pulumi's AI agent with markdown rendering
+- **Platform View**: Browse Services, Components (Registry Packages), and Templates
+- **Organization Selector**: Switch between organizations on-the-fly with `o`
+- **Splash Screen**: Startup checks for token validation and CLI availability
+- **Log Viewer**: Built-in log viewer for debugging with `l`
 
 ## Prerequisites
 
 - Rust 1.82+ (uses latest Ratatui)
 - Pulumi Access Token
+- Pulumi CLI (checked on startup)
 
 ## Setup
 
@@ -24,6 +28,9 @@ export PULUMI_ACCESS_TOKEN="pul-xxxxxxxxxxxx"
 
 # Optional: Set default organization
 export PULUMI_ORG="your-org-name"
+
+# Optional: Custom API endpoint (defaults to https://api.pulumi.com)
+export PULUMI_API_URL="https://api.pulumi.com"
 ```
 
 ## Build & Run
@@ -34,7 +41,17 @@ cargo build --release
 
 # Run
 cargo run --release
+
+# Run with debug logging
+RUST_LOG=debug cargo run --release
 ```
+
+## Logging
+
+Logs are written to a file to avoid interfering with the TUI:
+- **Log file location**: `~/.cache/lazy-pulumi/app.log`
+- Press `l` globally to open the log viewer popup
+- Logs are color-coded by level (ERROR=red, WARN=yellow, INFO=blue, DEBUG=muted)
 
 ## Keyboard Shortcuts
 
@@ -43,6 +60,7 @@ cargo run --release
 |-----|--------|
 | `Tab` / `Shift+Tab` | Switch between views |
 | `o` | Open organization selector |
+| `l` | Open log viewer |
 | `?` | Toggle help |
 | `q` / `Ctrl+C` | Quit |
 | `r` | Refresh data |
@@ -74,9 +92,42 @@ cargo run --release
 |-----|--------|
 | `n` | Start new task |
 | `i` | Focus input field |
-| `Enter` | Send message |
-| `Esc` | Unfocus input |
+| `d` | Show task details (in full-width chat mode) |
+| `Enter` | Send message / Load selected task |
+| `Esc` | Show task list (exit full-width chat) / Unfocus input |
+| `j` / `k` | Scroll chat down/up (3 lines) |
+| `J` / `K` | Scroll chat by page |
+| `g` | Jump to oldest messages |
+| `G` | Jump to newest messages + enable auto-scroll |
 | `Page Up/Down` | Scroll messages |
+
+### Platform View
+| Key | Action |
+|-----|--------|
+| `h` / `←` | Previous sub-tab |
+| `l` / `→` | Next sub-tab |
+| `j` / `k` | Navigate list |
+| `Enter` | Select item |
+
+### Log Viewer
+| Key | Action |
+|-----|--------|
+| `l` / `Esc` | Close logs |
+| `w` | Toggle word wrap |
+| `j` / `↓` | Scroll down 3 lines |
+| `k` / `↑` | Scroll up 3 lines |
+| `J` / `PageDown` | Scroll down by page |
+| `K` / `PageUp` | Scroll up by page |
+| `g` | Jump to top |
+| `G` | Jump to bottom |
+| `R` | Refresh logs |
+
+### Splash Screen
+| Key | Action |
+|-----|--------|
+| `Enter` | Continue (when checks pass) |
+| `Space` | Toggle "Don't show again" |
+| `q` | Quit (when checks fail) |
 
 ## Architecture
 
@@ -86,14 +137,14 @@ src/
 ├── app.rs           # Application state & main loop
 ├── event.rs         # Event handling (keyboard, mouse)
 ├── tui.rs           # Terminal setup/teardown
-├── theme.rs         # Colors & styling
+├── theme.rs         # Official Pulumi brand colors & styling
+├── config.rs        # User configuration (splash screen preference)
+├── startup.rs       # Startup validation checks
+├── logging.rs       # File-based logging system
 ├── api/             # Pulumi API client
 │   ├── mod.rs
 │   ├── client.rs    # HTTP client
-│   ├── types.rs     # Data structures
-│   ├── stacks.rs
-│   ├── esc.rs
-│   └── neo.rs
+│   └── types.rs     # Data structures (Stacks, ESC, NEO, Resources, Registry)
 ├── components/      # Reusable UI components
 │   ├── mod.rs
 │   ├── input.rs     # Text input field
@@ -101,23 +152,59 @@ src/
 │   └── spinner.rs   # Loading spinner
 └── ui/              # View rendering
     ├── mod.rs
-    ├── dashboard.rs
-    ├── stacks.rs
-    ├── esc.rs
-    ├── neo.rs
-    ├── header.rs
-    └── help.rs
+    ├── dashboard.rs # Overview with stats widgets
+    ├── stacks.rs    # Stack list and update history
+    ├── esc.rs       # ESC environments with YAML/resolved values
+    ├── neo.rs       # Chat interface for Pulumi's AI agent
+    ├── platform.rs  # Services, Components, Templates browser
+    ├── header.rs    # Tab bar with organization display
+    ├── help.rs      # Keyboard shortcut overlay
+    ├── logs.rs      # Log viewer popup
+    ├── splash.rs    # Startup splash screen with checklist
+    └── markdown.rs  # Markdown rendering for NEO messages
 ```
 
 ## Color Theme
 
-The UI uses a Pulumi-inspired color palette:
-- **Primary**: Purple (#8A5EFF)
-- **Secondary**: Soft Blue (#63B3ED)
-- **Accent**: Warm Orange (#F6AD55)
-- **Success**: Green (#48BB78)
-- **Warning**: Orange (#F6AD55)
-- **Error**: Red (#F56565)
+The UI uses the official Pulumi brand color palette:
+
+| Color | Hex | Usage |
+|-------|-----|-------|
+| **Yellow** | #f7bf2a | Accents, highlights, warnings |
+| **Salmon** | #f26e7e | Errors, failed states |
+| **Fuchsia** | #bd4c85 | Special highlights |
+| **Purple** | #8a3391 | Brand accent |
+| **Violet** | #805ac3 | Primary accent, focused borders |
+| **Blue** | #4d5bd9 | Secondary accent, info states |
+
+Additional UI colors:
+- **Success**: Green (#48BB78) for passed states
+- **Background**: Dark theme with purple undertones
+
+## NEO Chat Features
+
+The NEO view provides a rich chat interface for Pulumi's AI agent:
+
+- **Markdown Rendering**: Bold, italic, code blocks, headers, lists
+- **Auto-scroll**: Automatically scrolls to new messages
+- **Task Details Dialog**: Press `d` to view task metadata including:
+  - Status (idle, running, completed, failed)
+  - Started by (user info)
+  - Linked PRs with state (open/merged/closed)
+  - Involved entities (stacks, environments, repositories)
+  - Active policies
+- **Thinking Indicator**: Animated spinner while NEO is processing
+- **Background Polling**: Updates automatically every few seconds
+
+## Splash Screen
+
+On startup, the application displays a splash screen with:
+- Pulumi logo (scaled to terminal size)
+- Version information
+- Startup checklist:
+  - PULUMI_ACCESS_TOKEN validation
+  - Pulumi CLI availability check
+- Option to skip splash screen on future launches
 
 ## License
 
