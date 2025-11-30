@@ -127,6 +127,7 @@ pub enum EscPane {
 }
 
 impl EscPane {
+    #[allow(dead_code)]
     pub fn toggle(&self) -> Self {
         match self {
             EscPane::Definition => EscPane::ResolvedValues,

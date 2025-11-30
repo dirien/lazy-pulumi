@@ -375,6 +375,7 @@ The dashboard displays:
    - Environments count
    - Neo Tasks count
    - Resources count
+   - Uses `tui-big-text` crate with `PixelSize::Quadrant` for large, centered numbers
 
 2. **Resource Count Over Time** (full-width chart):
    - Uses ratatui `Chart` widget with `GraphType::Line` and `Marker::Braille`

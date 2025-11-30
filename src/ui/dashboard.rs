@@ -7,6 +7,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Axis, Block, Borders, Chart, Dataset, GraphType, Paragraph},
 };
+use tui_big_text::{BigText, PixelSize};
 
 use crate::app::AppState;
 use crate::theme::{symbols, Theme};
@@ -52,7 +53,7 @@ pub fn render_dashboard(frame: &mut Frame, theme: &Theme, area: Rect, state: &Ap
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(8),  // Stats cards
+            Constraint::Length(10), // Stats cards with big text
             Constraint::Min(10),    // Recent activity
         ])
         .split(area);
@@ -127,7 +128,7 @@ fn render_stat_card(
     area: Rect,
     title: &str,
     value: &str,
-    icon: &str,
+    _icon: &str,
     accent_color: Color,
 ) {
     let block = Block::default()
@@ -139,25 +140,29 @@ fn render_stat_card(
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let content = Layout::default()
+    // BigText with Quadrant pixel size is 4 rows tall
+    let big_text_height = 4_u16;
+
+    // Center vertically within the inner area
+    let vertical_padding = inner.height.saturating_sub(big_text_height) / 2;
+    let centered_area = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(2), Constraint::Length(2)])
-        .margin(1)
-        .split(inner);
+        .constraints([
+            Constraint::Length(vertical_padding),
+            Constraint::Length(big_text_height),
+            Constraint::Min(0),
+        ])
+        .split(inner)[1];
 
-    // Icon and value
-    let value_line = Line::from(vec![
-        Span::styled(format!("{} ", icon), Style::default().fg(accent_color)),
-        Span::styled(
-            value,
-            Style::default()
-                .fg(theme.text_primary)
-                .add_modifier(Modifier::BOLD),
-        ),
-    ]);
+    // Use BigText for the value
+    let big_text = BigText::builder()
+        .pixel_size(PixelSize::Quadrant)
+        .style(Style::default().fg(accent_color))
+        .lines(vec![Line::from(value)])
+        .centered()
+        .build();
 
-    let value_para = Paragraph::new(value_line).alignment(Alignment::Center);
-    frame.render_widget(value_para, content[0]);
+    frame.render_widget(big_text, centered_area);
 }
 
 fn render_recent_activity(frame: &mut Frame, theme: &Theme, area: Rect, state: &AppState) {

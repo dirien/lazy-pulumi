@@ -61,6 +61,7 @@ impl TextEditor {
     }
 
     /// Set the visible height for scrolling
+    #[allow(dead_code)]
     pub fn set_visible_height(&mut self, height: usize) {
         self.visible_height = height.max(1);
         self.ensure_cursor_visible();
@@ -92,11 +93,13 @@ impl TextEditor {
     }
 
     /// Get total line count
+    #[allow(dead_code)]
     pub fn line_count(&self) -> usize {
         self.lines.len()
     }
 
     /// Get current line
+    #[allow(dead_code)]
     pub fn current_line(&self) -> &str {
         &self.lines[self.row]
     }
