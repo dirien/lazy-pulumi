@@ -372,12 +372,12 @@ fn render_chat_view(
                 0
             };
 
-            // Draw scrollbar track and thumb
+            // Draw scrollbar track and thumb (using Violet for on-brand look)
             for y in 0..messages_inner.height {
                 let y_pos = scrollbar_area.y + y;
                 let is_thumb = (y as usize) >= thumb_pos && (y as usize) < thumb_pos + thumb_height;
                 let symbol = if is_thumb { "█" } else { "░" };
-                let style = if is_thumb { theme.accent() } else { theme.text_muted() };
+                let style = if is_thumb { theme.primary() } else { theme.text_muted() };
 
                 frame.buffer_mut().set_string(
                     scrollbar_area.x,
