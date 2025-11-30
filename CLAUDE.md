@@ -144,7 +144,7 @@ The application follows TEA principles:
 1. **Model** (`app/types.rs`): Pure data types defining application state
    - `AppState` - All fetched data (stacks, environments, tasks, etc.)
    - `Tab`, `FocusMode`, `PlatformView` - UI state enums
-   - `DataLoadResult`, `NeoAsyncResult` - Async operation results
+   - `DataLoadResult`, `NeoAsyncResult`, `StartupCheckResult` - Async operation results
 
 2. **Update** (`app/handlers.rs`): Event handlers that modify state
    - `handle_key()` - Main keyboard event dispatcher
@@ -202,6 +202,17 @@ Views in `src/ui/` render to Ratatui frames:
 - Popup states (`show_help`, `show_org_selector`, `error`) overlay the main content
 - Each view has a `StatefulList` for selection tracking
 
+### Startup Checks (Async)
+
+Startup checks run asynchronously to keep the UI responsive:
+- **Implementation**: `spawn_startup_checks()` in `handlers.rs` spawns background tasks
+- **Communication**: Uses `StartupCheckResult` enum and tokio channel (`startup_result_tx/rx`)
+- **Processing**: `process_startup_results()` receives results non-blocking in main loop
+- **Benefits**: Spinner animates during CLI version check instead of UI freezing
+- **Checks performed**:
+  - `PULUMI_ACCESS_TOKEN` environment variable (synchronous but wrapped in task)
+  - Pulumi CLI availability via `pulumi version` (async)
+
 ## NEO Chat Implementation
 
 ### Polling Mechanism
@@ -223,6 +234,7 @@ The NEO chat uses async polling to fetch agent responses:
 - `neo_bg_poll_counter: u8` - Background poll counter when NEO tab is active
 - `neo_scroll_state: ScrollViewState` - Scroll state from tui-scrollview crate
 - `neo_auto_scroll: Arc<AtomicBool>` - Thread-safe auto-scroll toggle
+- `neo_task_is_running: bool` - Tracks if current task status is "running" (from API)
 
 ### Scrolling Implementation (using tui-scrollview)
 Uses `tui-scrollview` crate for proper scroll handling (similar to Tenere LLM TUI):
@@ -238,7 +250,9 @@ Key methods used:
 - `scroll_state.offset()` - Get current scroll position for scrollbar
 
 ### Thinking Indicator
-- Dedicated 2-line area shown between chat and input when `is_loading` or `neo_polling` is true
+- Dedicated 2-line area shown between chat and input
+- Visible when: `neo_polling || is_loading || neo_task_is_running`
+- `neo_task_is_running` ensures banner stays visible until API confirms task is no longer running
 - Displays animated spinner with "NEO is thinking..." message
 - Centered with background highlight for visibility
 
