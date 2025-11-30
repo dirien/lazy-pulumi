@@ -59,13 +59,13 @@ fn render_stats_cards(frame: &mut Frame, theme: &Theme, area: Rect, state: &AppS
         theme.secondary,
     );
 
-    // NEO Tasks card
+    // Neo Tasks card
     let neo_count = state.neo_tasks.len();
     render_stat_card(
         frame,
         theme,
         chunks[2],
-        "NEO Tasks",
+        "Neo Tasks",
         &neo_count.to_string(),
         symbols::BULLET,
         theme.accent,

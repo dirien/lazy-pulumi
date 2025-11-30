@@ -1,7 +1,7 @@
-//! Lazy Pulumi - A stylish TUI for Pulumi Cloud, ESC, and NEO
+//! Lazy Pulumi - A stylish TUI for Pulumi Cloud, ESC, and Neo
 //!
 //! This application provides a terminal-based interface for managing
-//! Pulumi stacks, ESC environments, and interacting with Pulumi NEO.
+//! Pulumi stacks, ESC environments, and interacting with Pulumi Neo.
 
 mod api;
 mod app;

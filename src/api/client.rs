@@ -252,10 +252,10 @@ impl PulumiClient {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // NEO API (Preview Agents API)
+    // Neo API (Preview Agents API)
     // ─────────────────────────────────────────────────────────────
 
-    /// List NEO tasks
+    /// List Neo tasks
     pub async fn list_neo_tasks(&self, org: Option<&str>) -> Result<Vec<NeoTask>, ApiError> {
         let org = org
             .or(self.config.organization.as_deref())
@@ -286,7 +286,7 @@ impl PulumiClient {
         Ok(data.tasks)
     }
 
-    /// Create a new NEO task
+    /// Create a new Neo task
     pub async fn create_neo_task(
         &self,
         org: &str,
@@ -322,7 +322,7 @@ impl PulumiClient {
         })
     }
 
-    /// Continue/respond to a NEO task
+    /// Continue/respond to a Neo task
     pub async fn continue_neo_task(
         &self,
         org: &str,
@@ -366,7 +366,7 @@ impl PulumiClient {
         })
     }
 
-    /// Get NEO task events (messages)
+    /// Get Neo task events (messages)
     pub async fn get_neo_task_events(
         &self,
         org: &str,

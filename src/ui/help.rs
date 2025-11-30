@@ -63,13 +63,13 @@ pub fn render_help(frame: &mut Frame, theme: &Theme) {
             ],
         ),
         (
-            "NEO View",
+            "Neo View",
             vec![
                 ("n", "Start new task"),
                 ("i", "Focus input field"),
-                ("Enter", "Send message"),
-                ("Esc", "Unfocus input"),
-                ("Page Up/Down", "Scroll messages"),
+                ("Enter", "Send/select task"),
+                ("Esc", "Show task list"),
+                ("j/k", "Scroll messages"),
             ],
         ),
         (

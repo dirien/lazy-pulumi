@@ -1,17 +1,16 @@
-//! NEO AI agent view rendering
+//! Neo AI agent view rendering
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect, Size},
+    layout::{Constraint, Direction, Layout, Rect},
     prelude::*,
     style::Modifier,
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph},
 };
-use tui_scrollview::{ScrollView, ScrollViewState};
-use unicode_width::UnicodeWidthStr;
+use tui_scrollview::ScrollViewState;
 
 use crate::api::{NeoMessage, NeoMessageType, NeoTask};
 use crate::components::{StatefulList, TextInput};
@@ -26,7 +25,7 @@ const APPROVAL_ICON: &str = "❓";
 const INFO_ICON: &str = "ℹ️";
 const THINKING_ICON: &str = "🤔";
 
-/// Render the NEO chat view
+/// Render the Neo chat view
 pub fn render_neo_view(
     frame: &mut Frame,
     theme: &Theme,
@@ -38,14 +37,21 @@ pub fn render_neo_view(
     auto_scroll: &Arc<AtomicBool>,
     is_loading: bool,
     spinner_char: &str,
+    hide_task_list: bool,
 ) {
-    let chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
-        .split(area);
+    if hide_task_list {
+        // Full-width chat when task list is hidden
+        render_chat_view(frame, theme, area, messages, input, scroll_state, auto_scroll, is_loading, spinner_char);
+    } else {
+        // Split view with task list on left
+        let chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
+            .split(area);
 
-    render_tasks_list(frame, theme, chunks[0], tasks);
-    render_chat_view(frame, theme, chunks[1], messages, input, scroll_state, auto_scroll, is_loading, spinner_char);
+        render_tasks_list(frame, theme, chunks[0], tasks);
+        render_chat_view(frame, theme, chunks[1], messages, input, scroll_state, auto_scroll, is_loading, spinner_char);
+    }
 }
 
 fn render_tasks_list(
@@ -112,7 +118,7 @@ fn render_tasks_list(
             Block::default()
                 .borders(Borders::ALL)
                 .border_style(theme.border())
-                .title(" NEO Tasks ")
+                .title(" Neo Tasks ")
                 .title_style(theme.title()),
         )
         .highlight_style(theme.selected())
@@ -157,77 +163,87 @@ fn render_chat_view(
     let messages_inner = messages_block.inner(chunks[0]);
     frame.render_widget(messages_block, chunks[0]);
 
-    if messages.is_empty() && !is_loading {
-        let welcome_lines = vec![
-            Line::from(""),
-            Line::from(vec![
-                Span::styled("  Welcome to ", theme.text_secondary()),
-                Span::styled("Pulumi NEO", theme.primary()),
-                Span::styled("!", theme.text_secondary()),
-            ]),
-            Line::from(""),
-            Line::from(Span::styled(
-                "  NEO is your AI infrastructure agent.",
-                theme.text_secondary(),
-            )),
-            Line::from(Span::styled(
-                "  Ask questions about your infrastructure,",
-                theme.text_secondary(),
-            )),
-            Line::from(Span::styled(
-                "  or request help with Pulumi operations.",
-                theme.text_secondary(),
-            )),
-            Line::from(""),
-            Line::from(vec![
-                Span::styled("  Examples:", theme.text_muted()),
-            ]),
-            Line::from(vec![
-                Span::styled("    ", theme.text_muted()),
-                Span::styled(symbols::BULLET, theme.accent()),
-                Span::styled(" \"List all my AWS S3 buckets\"", theme.text()),
-            ]),
-            Line::from(vec![
-                Span::styled("    ", theme.text_muted()),
-                Span::styled(symbols::BULLET, theme.accent()),
-                Span::styled(" \"Check for policy violations\"", theme.text()),
-            ]),
-            Line::from(vec![
-                Span::styled("    ", theme.text_muted()),
-                Span::styled(symbols::BULLET, theme.accent()),
-                Span::styled(" \"Help me optimize my infrastructure\"", theme.text()),
-            ]),
-            Line::from(""),
-            Line::from(vec![
-                Span::styled("  Press ", theme.text_muted()),
-                Span::styled("n", theme.key_hint()),
-                Span::styled(" to start a new task, or ", theme.text_muted()),
-                Span::styled("Enter", theme.key_hint()),
-                Span::styled(" to send a message.", theme.text_muted()),
-            ]),
-        ];
+    if messages.is_empty() {
+        // Show welcome message or loading indicator
+        if is_loading {
+            // Just show empty area while loading - the thinking indicator below will show
+        } else {
+            let welcome_lines = vec![
+                Line::from(""),
+                Line::from(vec![
+                    Span::styled("  Welcome to ", theme.text_secondary()),
+                    Span::styled("Pulumi Neo", theme.primary()),
+                    Span::styled("!", theme.text_secondary()),
+                ]),
+                Line::from(""),
+                Line::from(Span::styled(
+                    "  Neo is your AI infrastructure agent.",
+                    theme.text_secondary(),
+                )),
+                Line::from(Span::styled(
+                    "  Ask questions about your infrastructure,",
+                    theme.text_secondary(),
+                )),
+                Line::from(Span::styled(
+                    "  or request help with Pulumi operations.",
+                    theme.text_secondary(),
+                )),
+                Line::from(""),
+                Line::from(vec![
+                    Span::styled("  Examples:", theme.text_muted()),
+                ]),
+                Line::from(vec![
+                    Span::styled("    ", theme.text_muted()),
+                    Span::styled(symbols::BULLET, theme.accent()),
+                    Span::styled(" \"List all my AWS S3 buckets\"", theme.text()),
+                ]),
+                Line::from(vec![
+                    Span::styled("    ", theme.text_muted()),
+                    Span::styled(symbols::BULLET, theme.accent()),
+                    Span::styled(" \"Check for policy violations\"", theme.text()),
+                ]),
+                Line::from(vec![
+                    Span::styled("    ", theme.text_muted()),
+                    Span::styled(symbols::BULLET, theme.accent()),
+                    Span::styled(" \"Help me optimize my infrastructure\"", theme.text()),
+                ]),
+                Line::from(""),
+                Line::from(vec![
+                    Span::styled("  Press ", theme.text_muted()),
+                    Span::styled("n", theme.key_hint()),
+                    Span::styled(" to start a new task, or ", theme.text_muted()),
+                    Span::styled("Enter", theme.key_hint()),
+                    Span::styled(" to load selected task.", theme.text_muted()),
+                ]),
+            ];
 
-        let welcome = Paragraph::new(welcome_lines);
-        frame.render_widget(welcome, messages_inner);
+            let welcome = Paragraph::new(welcome_lines);
+            frame.render_widget(welcome, messages_inner);
+        }
     } else {
-        // Build message lines with markdown support
+        // Build message lines - all left-aligned for simplicity
         let mut lines: Vec<Line> = Vec::new();
 
         for msg in messages.iter() {
             match msg.message_type {
                 NeoMessageType::UserMessage => {
+                    // User messages with arrow indicator
                     lines.push(Line::from(Span::styled(
-                        format!("{} You: ", symbols::ARROW_RIGHT),
+                        format!("{} You:", symbols::ARROW_RIGHT),
                         theme.user_message().add_modifier(Modifier::BOLD),
                     )));
                     for line in msg.content.lines() {
-                        lines.push(Line::from(Span::styled(format!("    {}", line), theme.text())));
+                        lines.push(Line::from(Span::styled(
+                            format!("    {}", line),
+                            theme.text(),
+                        )));
                     }
                     lines.push(Line::from(""));
                 }
                 NeoMessageType::AssistantMessage => {
+                    // Neo messages with star indicator
                     lines.push(Line::from(Span::styled(
-                        format!("{} NEO: ", symbols::STAR),
+                        format!("{} Neo:", symbols::STAR),
                         theme.neo_message().add_modifier(Modifier::BOLD),
                     )));
                     let md_lines = render_markdown_content(&msg.content, theme, "    ");
@@ -238,7 +254,10 @@ fn render_chat_view(
                             lines.push(Line::from(vec![
                                 Span::styled(format!("    {} ", TOOL_ICON), theme.warning()),
                                 Span::styled("Calling: ", theme.text_muted()),
-                                Span::styled(tc.name.clone(), theme.accent().add_modifier(Modifier::BOLD)),
+                                Span::styled(
+                                    tc.name.clone(),
+                                    theme.accent().add_modifier(Modifier::BOLD),
+                                ),
                             ]));
                         }
                     }
@@ -274,7 +293,10 @@ fn render_chat_view(
                 NeoMessageType::ApprovalRequest => {
                     lines.push(Line::from(vec![
                         Span::styled(format!("  {} ", APPROVAL_ICON), theme.warning()),
-                        Span::styled("Approval needed: ", theme.warning().add_modifier(Modifier::BOLD)),
+                        Span::styled(
+                            "Approval needed: ",
+                            theme.warning().add_modifier(Modifier::BOLD),
+                        ),
                     ]));
                     for line in msg.content.lines() {
                         lines.push(Line::from(Span::styled(
@@ -287,50 +309,84 @@ fn render_chat_view(
                 NeoMessageType::TaskNameChange => {
                     lines.push(Line::from(vec![
                         Span::styled(format!("  {} ", INFO_ICON), theme.text_muted()),
-                        Span::styled(msg.content.clone(), theme.text_secondary().add_modifier(Modifier::ITALIC)),
+                        Span::styled(
+                            msg.content.clone(),
+                            theme.text_secondary().add_modifier(Modifier::ITALIC),
+                        ),
                     ]));
                 }
             }
         }
 
-        // Calculate wrapped content height using proper unicode width
-        let available_width = messages_inner.width.saturating_sub(2) as usize; // -2 for scrollbar + margin
-        let mut wrapped_height: u16 = 0;
-        for line in &lines {
-            // Calculate the display width of this line using unicode width
-            let line_width: usize = line.spans.iter().map(|s| s.content.width()).sum();
-            if line_width == 0 {
-                wrapped_height += 1;
-            } else if available_width == 0 {
-                wrapped_height += 1;
-            } else {
-                // How many visual lines will this take when wrapped?
-                // Add 1 to ensure we don't undercount
-                wrapped_height += ((line_width + available_width - 1) / available_width) as u16;
-            }
-        }
-        // Add extra buffer for any edge cases in wrapping
-        wrapped_height = (wrapped_height + (wrapped_height / 10).max(5)).max(1);
+        // === Direct scrolling using Ratatui's line_count() ===
+        //
+        // Using the unstable-rendered-line-info feature, we get the EXACT line count
+        // after wrapping, eliminating all estimation guesswork.
 
-        // Create ScrollView - width matches viewport (no horizontal scroll), height is wrapped content
-        let content_width = messages_inner.width;
-        let scroll_height = wrapped_height.max(messages_inner.height);
-        let mut scroll_view = ScrollView::new(Size::new(content_width, scroll_height));
+        let visible_height = messages_inner.height as usize;
 
-        // Render content into scroll view with word wrap
-        // Use the full scroll height to ensure all content is visible
-        let content_area = Rect::new(0, 0, content_width, scroll_height);
+        // Create paragraph with wrapping to get accurate line count
         let content_para = Paragraph::new(lines)
             .wrap(ratatui::widgets::Wrap { trim: false });
-        scroll_view.render_widget(content_para, content_area);
 
-        // Auto-scroll to bottom if enabled
-        if auto_scroll.load(Ordering::Relaxed) {
-            scroll_state.scroll_to_bottom();
+        // Get EXACT line count from Ratatui (accounts for actual word wrapping)
+        let total_lines = content_para.line_count(messages_inner.width);
+        let max_scroll = total_lines.saturating_sub(visible_height);
+
+        // Determine scroll position
+        let scroll_y: u16 = if auto_scroll.load(Ordering::Relaxed) {
+            // When auto-scroll is enabled, go to exact bottom
+            max_scroll as u16
+        } else {
+            // Manual scroll: use the stored offset, clamped to max
+            let current_offset = scroll_state.offset();
+            (current_offset.y as usize).min(max_scroll) as u16
+        };
+
+        // Apply scroll and render
+        let content_para = content_para.scroll((scroll_y, 0));
+        frame.render_widget(content_para, messages_inner);
+
+        // Render scrollbar manually if content exceeds viewport
+        if total_lines > visible_height {
+            // Simple scrollbar indicator on the right edge
+            let scrollbar_area = Rect::new(
+                messages_inner.right().saturating_sub(1),
+                messages_inner.y,
+                1,
+                messages_inner.height,
+            );
+
+            // For scrollbar, use estimated position (not u16::MAX)
+            let scrollbar_pos = if auto_scroll.load(Ordering::Relaxed) {
+                max_scroll // At bottom
+            } else {
+                scroll_state.offset().y as usize
+            };
+
+            // Calculate thumb position and size
+            let thumb_height = ((visible_height * visible_height) / total_lines).max(1);
+            let thumb_pos = if max_scroll > 0 {
+                (scrollbar_pos.min(max_scroll) * (visible_height - thumb_height)) / max_scroll
+            } else {
+                0
+            };
+
+            // Draw scrollbar track and thumb
+            for y in 0..messages_inner.height {
+                let y_pos = scrollbar_area.y + y;
+                let is_thumb = (y as usize) >= thumb_pos && (y as usize) < thumb_pos + thumb_height;
+                let symbol = if is_thumb { "█" } else { "░" };
+                let style = if is_thumb { theme.accent() } else { theme.text_muted() };
+
+                frame.buffer_mut().set_string(
+                    scrollbar_area.x,
+                    y_pos,
+                    symbol,
+                    style,
+                );
+            }
         }
-
-        // Render the scroll view (it has its own scrollbar)
-        frame.render_stateful_widget(scroll_view, messages_inner, scroll_state);
     }
 
     // Thinking indicator (always visible when loading)
@@ -338,7 +394,7 @@ fn render_chat_view(
         let thinking_line = Line::from(vec![
             Span::styled(format!(" {} ", THINKING_ICON), theme.primary()),
             Span::styled(format!("{} ", spinner_char), theme.warning()),
-            Span::styled("NEO is thinking", theme.text()),
+            Span::styled("Neo is thinking", theme.text()),
             Span::styled("...", theme.text_muted()),
         ]);
 

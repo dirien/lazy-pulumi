@@ -154,7 +154,7 @@ pub struct EscOpenResponse {
     pub values: Option<serde_json::Value>,
 }
 
-/// NEO Task
+/// Neo Task
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NeoTask {
@@ -171,7 +171,7 @@ pub struct NeoTask {
     pub url: Option<String>,
 }
 
-/// NEO Message type enum
+/// Neo Message type enum
 #[derive(Debug, Clone, PartialEq)]
 pub enum NeoMessageType {
     UserMessage,
@@ -182,7 +182,7 @@ pub enum NeoMessageType {
     TaskNameChange,
 }
 
-/// NEO Tool Call
+/// Neo Tool Call
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NeoToolCall {
     #[serde(default)]
@@ -193,7 +193,7 @@ pub struct NeoToolCall {
     pub args: Option<serde_json::Value>,
 }
 
-/// NEO Message
+/// Neo Message
 #[derive(Debug, Clone)]
 pub struct NeoMessage {
     #[allow(dead_code)]
@@ -208,14 +208,14 @@ pub struct NeoMessage {
     pub tool_name: Option<String>,
 }
 
-/// NEO Create Task API response
+/// Neo Create Task API response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NeoCreateTaskResponse {
     pub task_id: String,
 }
 
-/// NEO Task response (internal struct, not from JSON)
+/// Neo Task response (internal struct, not from JSON)
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct NeoTaskResponse {
@@ -226,7 +226,7 @@ pub struct NeoTaskResponse {
     pub requires_approval: bool,
 }
 
-/// NEO Tasks list response
+/// Neo Tasks list response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(dead_code)]
 pub struct NeoTasksResponse {
