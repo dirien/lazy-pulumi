@@ -10,6 +10,7 @@ mod logs;
 mod markdown;
 mod neo;
 mod platform;
+mod splash;
 mod stacks;
 
 pub use dashboard::render_dashboard;
@@ -19,6 +20,7 @@ pub use help::render_help;
 pub use logs::render_logs;
 pub use neo::render_neo_view;
 pub use platform::render_platform_view;
+pub use splash::render_splash;
 pub use stacks::render_stacks_view;
 
 use ratatui::{

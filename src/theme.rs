@@ -5,6 +5,19 @@
 
 use ratatui::style::{Color, Modifier, Style};
 
+/// Color palette for direct access
+pub struct Colors {
+    pub cyan: Color,
+}
+
+impl Default for Colors {
+    fn default() -> Self {
+        Self {
+            cyan: Color::Rgb(78, 201, 176), // Teal/cyan (for title)
+        }
+    }
+}
+
 /// Pulumi-inspired color palette
 pub struct Theme {
     // Primary colors
@@ -32,6 +45,9 @@ pub struct Theme {
     pub highlight: Color,
     pub border: Color,
     pub border_focused: Color,
+
+    // Direct color access
+    pub colors: Colors,
 }
 
 impl Default for Theme {
@@ -62,6 +78,9 @@ impl Default for Theme {
             highlight: Color::Rgb(138, 94, 255),
             border: Color::Rgb(60, 60, 80),
             border_focused: Color::Rgb(138, 94, 255),
+
+            // Direct color access
+            colors: Colors::default(),
         }
     }
 }

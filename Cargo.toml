@@ -39,6 +39,9 @@ urlencoding = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# Image processing for splash screen
+image = "0.25"
+
 [profile.release]
 lto = true
 codegen-units = 1

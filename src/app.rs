@@ -4,14 +4,16 @@
 //! and the main run loop.
 
 use color_eyre::Result;
-use crossterm::event::KeyEvent;
+use crossterm::event::{KeyCode, KeyEvent};
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::process::Command;
 use tokio::sync::mpsc;
 use tui_scrollview::ScrollViewState;
+
+use crate::config::Config;
 
 use crate::api::{
     EscEnvironmentSummary, NeoMessage, NeoMessageType, NeoTask, PulumiClient, RegistryPackage,
@@ -235,6 +237,21 @@ pub struct App {
     /// Focus mode
     focus: FocusMode,
 
+    /// Show splash screen on startup
+    show_splash: bool,
+
+    /// Splash screen start time (for minimum display duration)
+    splash_start_time: Option<Instant>,
+
+    /// Minimum splash screen duration in seconds
+    splash_min_duration: Duration,
+
+    /// Whether the "don't show again" checkbox is selected
+    splash_dont_show_again: bool,
+
+    /// User configuration
+    config: Config,
+
     /// Show help popup
     show_help: bool,
 
@@ -358,6 +375,9 @@ impl App {
         let events = EventHandler::new(Duration::from_millis(100));
         let theme = Theme::new();
 
+        // Load user configuration
+        let config = Config::load();
+
         // Try to create API client
         let client = match PulumiClient::new() {
             Ok(c) => Some(c),
@@ -373,6 +393,9 @@ impl App {
         // Create channel for async data loading results
         let (data_result_tx, data_result_rx) = mpsc::channel::<DataLoadResult>(32);
 
+        // Determine if splash should be shown based on config
+        let show_splash = config.show_splash;
+
         let mut app = Self {
             terminal,
             events,
@@ -380,6 +403,11 @@ impl App {
             theme,
             tab: Tab::Dashboard,
             focus: FocusMode::Normal,
+            show_splash,
+            splash_start_time: if show_splash { Some(Instant::now()) } else { None },
+            splash_min_duration: Duration::from_secs(5),
+            splash_dont_show_again: false,
+            config,
             show_help: false,
             show_org_selector: false,
             show_logs: false,
@@ -593,6 +621,7 @@ impl App {
             // Clear loading state when all loads complete
             if self.pending_data_loads == 0 {
                 self.is_loading = false;
+                // Note: splash screen is now dismissed via user interaction, not auto-hide
             }
         }
     }
@@ -821,6 +850,8 @@ impl App {
         let theme = &self.theme;
         let tab = self.tab;
         let org = self.state.organization.as_deref();
+        let show_splash = self.show_splash;
+        let splash_dont_show_again = self.splash_dont_show_again;
         let show_help = self.show_help;
         let show_org_selector = self.show_org_selector;
         let show_logs = self.show_logs;
@@ -855,6 +886,12 @@ impl App {
         let platform_desc_scroll_state = &mut self.platform_desc_scroll_state;
 
         self.terminal.draw(|frame| {
+            // Show splash screen (minimum 5 seconds or until dismissed)
+            if show_splash {
+                ui::render_splash(frame, theme, spinner_char, splash_dont_show_again, is_loading);
+                return;
+            }
+
             let (header_area, content_area, footer_area) = ui::main_layout(frame.area());
 
             // Header with tabs
@@ -976,6 +1013,12 @@ impl App {
 
     /// Handle key events
     async fn handle_key(&mut self, key: KeyEvent) {
+        // Handle splash screen first
+        if self.show_splash {
+            self.handle_splash_key(key);
+            return;
+        }
+
         // Handle error dismissal first
         if self.error.is_some() {
             if keys::is_escape(&key) || keys::is_enter(&key) {
@@ -1550,6 +1593,49 @@ impl App {
                 self.platform_desc_scroll_state = ScrollViewState::default();
             }
             _ => {}
+        }
+    }
+
+    /// Handle splash screen key events
+    fn handle_splash_key(&mut self, key: KeyEvent) {
+        // Check if minimum time has passed
+        let min_time_passed = self.splash_start_time
+            .map(|start| start.elapsed() >= self.splash_min_duration)
+            .unwrap_or(true);
+
+        match key.code {
+            // Space toggles the "don't show again" checkbox
+            KeyCode::Char(' ') => {
+                self.splash_dont_show_again = !self.splash_dont_show_again;
+            }
+            // Enter dismisses the splash (if min time passed and not loading)
+            KeyCode::Enter => {
+                if min_time_passed && !self.is_loading {
+                    self.dismiss_splash();
+                }
+            }
+            // Escape also dismisses (if min time passed and not loading)
+            KeyCode::Esc => {
+                if min_time_passed && !self.is_loading {
+                    self.dismiss_splash();
+                }
+            }
+            // q quits the application
+            KeyCode::Char('q') => {
+                self.should_quit = true;
+            }
+            _ => {}
+        }
+    }
+
+    /// Dismiss the splash screen and save preferences
+    fn dismiss_splash(&mut self) {
+        self.show_splash = false;
+
+        // Save preference if "don't show again" is checked
+        if self.splash_dont_show_again {
+            self.config.show_splash = false;
+            self.config.save();
         }
     }
 }
