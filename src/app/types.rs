@@ -33,6 +33,9 @@ pub enum NeoAsyncResult {
         messages: Vec<NeoMessage>,
         #[allow(dead_code)]
         has_more: bool,
+        /// Task status from API (e.g., "running", "idle", "completed")
+        /// Used to determine if we should keep polling/showing thinking indicator
+        task_status: Option<String>,
     },
     /// Error occurred
     Error(String),

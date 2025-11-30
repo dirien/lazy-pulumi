@@ -265,6 +265,8 @@ pub enum NeoMessageType {
     AssistantMessage,
     ToolCall,
     ToolResponse,
+    /// Tool response that resulted in an error (is_error: true from API)
+    ToolError,
     ApprovalRequest,
     TaskNameChange,
 }

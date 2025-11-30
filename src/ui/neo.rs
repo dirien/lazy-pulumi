@@ -22,6 +22,7 @@ use super::markdown::render_markdown_content;
 // Tool-related symbols
 const TOOL_ICON: &str = "🔧";
 const RESULT_ICON: &str = "📋";
+const ERROR_ICON: &str = "❌";
 const APPROVAL_ICON: &str = "❓";
 const INFO_ICON: &str = "ℹ️";
 const THINKING_ICON: &str = "🤔";
@@ -288,6 +289,26 @@ fn render_chat_view(
                         lines.push(Line::from(Span::styled(
                             format!("    {}", line),
                             theme.text_muted(),
+                        )));
+                    }
+                }
+                NeoMessageType::ToolError => {
+                    // Show tool error with red error styling
+                    lines.push(Line::from(vec![
+                        Span::styled(format!("  {} ", ERROR_ICON), theme.error()),
+                        Span::styled(
+                            format!(
+                                "Error running {}",
+                                msg.tool_name.clone().unwrap_or_else(|| "tool".to_string())
+                            ),
+                            theme.error().add_modifier(Modifier::BOLD),
+                        ),
+                    ]));
+                    // Show the error message (don't truncate as much for errors)
+                    for line in msg.content.lines().take(10) {
+                        lines.push(Line::from(Span::styled(
+                            format!("    {}", line),
+                            theme.error(),
                         )));
                     }
                 }
