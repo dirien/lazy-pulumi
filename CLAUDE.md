@@ -71,7 +71,7 @@ To test API calls manually:
 # Get token from .env
 TOKEN=$(cat .env | head -1)
 
-# List NEO tasks for an org
+# List Neo tasks for an org
 curl -s -H "Content-Type: application/json" \
   -H "Authorization: token $TOKEN" \
   "https://api.pulumi.com/api/preview/agents/{ORG}/tasks"
@@ -82,9 +82,9 @@ curl -s -H "Content-Type: application/json" \
   "https://api.pulumi.com/api/preview/agents/{ORG}/tasks/{TASK_ID}/events"
 ```
 
-## NEO API (Preview Agents)
+## Neo API (Preview Agents)
 
-The NEO AI agent uses the Preview Agents API:
+The Neo AI agent uses the Preview Agents API:
 - **List tasks**: `GET /api/preview/agents/{org}/tasks`
 - **Get task metadata**: `GET /api/preview/agents/{org}/tasks/{taskId}` - Returns single task details
 - **Create task**: `POST /api/preview/agents/{org}/tasks` with `{"message": {"type": "user_message", "content": "...", "timestamp": "..."}}`
@@ -165,7 +165,7 @@ The application follows TEA principles:
 
 - **Neo** (`src/app/neo.rs`): Neo AI agent operations including polling, message sending, and task management.
 
-- **API Client** (`src/api/client.rs`): Async HTTP client for Pulumi Cloud REST API. Handles authentication via bearer token and provides methods for Stacks, ESC, NEO, and Resource Search APIs.
+- **API Client** (`src/api/client.rs`): Async HTTP client for Pulumi Cloud REST API. Handles authentication via bearer token and provides methods for Stacks, ESC, Neo, and Resource Search APIs.
 
 - **Event System** (`src/event.rs`): Async event handler using crossterm. Generates tick events for animations and captures keyboard/mouse input.
 
@@ -213,12 +213,12 @@ Startup checks run asynchronously to keep the UI responsive:
   - `PULUMI_ACCESS_TOKEN` environment variable (synchronous but wrapped in task)
   - Pulumi CLI availability via `pulumi version` (async)
 
-## NEO Chat Implementation
+## Neo Chat Implementation
 
 ### Polling Mechanism
-The NEO chat uses async polling to fetch agent responses:
+The Neo chat uses async polling to fetch agent responses:
 - **Active polling** (after sending message): Every 500ms (5 ticks at 100ms tick rate)
-- **Background polling** (when viewing NEO tab): Every 3 seconds (30 ticks)
+- **Background polling** (when viewing Neo tab): Every 3 seconds (30 ticks)
 - **Immediate poll**: Triggered right after task creation
 - **Task status aware**: Polls fetch both events AND task status in parallel
 - **Stop conditions** for active polling:
@@ -231,7 +231,7 @@ The NEO chat uses async polling to fetch agent responses:
 - `neo_polling: bool` - Whether actively polling for responses (fast polling after sending)
 - `neo_poll_counter: u8` - Ticks since last poll
 - `neo_stable_polls: u8` - Consecutive polls with no new messages
-- `neo_bg_poll_counter: u8` - Background poll counter when NEO tab is active
+- `neo_bg_poll_counter: u8` - Background poll counter when Neo tab is active
 - `neo_scroll_state: ScrollViewState` - Scroll state from tui-scrollview crate
 - `neo_auto_scroll: Arc<AtomicBool>` - Thread-safe auto-scroll toggle
 - `neo_task_is_running: bool` - Tracks if current task status is "running" (from API)
@@ -253,7 +253,7 @@ Key methods used:
 - Dedicated 2-line area shown between chat and input
 - Visible when: `neo_polling || is_loading || neo_task_is_running`
 - `neo_task_is_running` ensures banner stays visible until API confirms task is no longer running
-- Displays animated spinner with "NEO is thinking..." message
+- Displays animated spinner with "Neo is thinking..." message
 - Centered with background highlight for visibility
 
 ### Markdown Rendering
@@ -266,7 +266,7 @@ Assistant messages support markdown rendering:
 - Bullet lists (`-` or `*`)
 - Numbered lists (`1.`, `2.`, etc.)
 
-### NEO Tab Key Bindings
+### Neo Tab Key Bindings
 | Key | Action |
 |-----|--------|
 | `i` | Enter input mode to type message |
@@ -308,7 +308,7 @@ Note: API may return `null` for array fields. Use custom deserializer `null_to_e
 
 ### Message Types (`NeoMessageType`)
 - `UserMessage` - User input
-- `AssistantMessage` - NEO's response (may include tool_calls, rendered with markdown)
+- `AssistantMessage` - Neo's response (may include tool_calls, rendered with markdown)
 - `ToolCall` - Tool execution notification
 - `ToolResponse` - Tool result (truncated display)
 - `ApprovalRequest` - Requires user approval
