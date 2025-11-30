@@ -1,0 +1,204 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Build & Run Commands
+
+```bash
+# Build (debug)
+cargo build
+
+# Build (release with optimizations)
+cargo build --release
+
+# Run (release mode recommended for performance)
+cargo run --release
+
+# Check for compilation errors without building
+cargo check
+
+# Run with debug logging
+RUST_LOG=debug cargo run --release
+```
+
+## Required Environment Variables
+
+```bash
+# Required: Pulumi API authentication
+export PULUMI_ACCESS_TOKEN="pul-xxxxxxxxxxxx"
+
+# Optional: Default organization
+export PULUMI_ORG="your-org-name"
+
+# Optional: Custom API endpoint (defaults to https://api.pulumi.com)
+export PULUMI_API_URL="https://api.pulumi.com"
+```
+
+## Credentials
+
+The Pulumi access token is stored in `.env` file (just the token, no variable name):
+```
+pul-xxxxxxxxxxxx
+```
+
+To test API calls manually:
+```bash
+# Get token from .env
+TOKEN=$(cat .env | head -1)
+
+# List NEO tasks for an org
+curl -s -H "Content-Type: application/json" \
+  -H "Authorization: token $TOKEN" \
+  "https://api.pulumi.com/api/preview/agents/{ORG}/tasks"
+
+# Get task events
+curl -s -H "Content-Type: application/json" \
+  -H "Authorization: token $TOKEN" \
+  "https://api.pulumi.com/api/preview/agents/{ORG}/tasks/{TASK_ID}/events"
+```
+
+## NEO API (Preview Agents)
+
+The NEO AI agent uses the Preview Agents API:
+- **List tasks**: `GET /api/preview/agents/{org}/tasks`
+- **Create task**: `POST /api/preview/agents/{org}/tasks` with `{"message": {"type": "user_message", "content": "...", "timestamp": "..."}}`
+- **Get events**: `GET /api/preview/agents/{org}/tasks/{taskId}/events`
+- **Respond**: `POST /api/preview/agents/{org}/tasks/{taskId}` with `{"event": {"type": "user_message", "content": "...", "timestamp": "..."}}`
+
+Event body types in responses:
+- `user_message` - User input (has `content`)
+- `assistant_message` - Assistant response (has `content`)
+- `set_task_name` - Task name change
+- `exec_tool_call` - Tool execution (has `tool_calls`)
+- `tool_response` - Tool result (has `content` with result)
+- `user_approval_request` - Approval request
+
+## Architecture Overview
+
+This is a terminal UI (TUI) application for Pulumi Cloud built with Ratatui and Tokio.
+
+### Core Components
+
+- **App** (`src/app.rs`): Central state machine managing UI state, data, and the main event loop. Contains `AppState` for data and handles keyboard events via tab-specific handlers.
+
+- **API Client** (`src/api/client.rs`): Async HTTP client for Pulumi Cloud REST API. Handles authentication via bearer token and provides methods for Stacks, ESC, NEO, and Resource Search APIs.
+
+- **Event System** (`src/event.rs`): Async event handler using crossterm. Generates tick events for animations and captures keyboard/mouse input.
+
+- **TUI** (`src/tui.rs`): Terminal setup/teardown with crossterm backend. Handles raw mode and alternate screen.
+
+### UI Layer
+
+Views in `src/ui/` render to Ratatui frames:
+- `dashboard.rs` - Overview with stats widgets
+- `stacks.rs` - Stack list and update history
+- `esc.rs` - ESC environments with YAML/resolved values
+- `neo.rs` - Chat interface for Pulumi's AI agent
+- `header.rs` - Tab bar with organization display
+- `help.rs` - Keyboard shortcut overlay
+
+### Reusable Components (`src/components/`)
+
+- `StatefulList<T>` - Scrollable list with selection state
+- `TextInput` - Single-line text input with cursor
+- `Spinner` - Animated loading indicator
+
+### Application Flow
+
+1. `main.rs` initializes color-eyre, tracing, creates `App`, and calls `app.run()`
+2. `App::new()` sets up terminal, event handler, API client, loads initial data
+3. `App::run()` enters async loop: render frame → poll events → handle input
+4. Tab-specific key handlers (`handle_stacks_key`, `handle_esc_key`, `handle_neo_key`) manage view interactions
+5. API calls are async and set `is_loading` flag during requests
+
+### State Management
+
+- `FocusMode::Normal` vs `FocusMode::Input` controls whether keys go to navigation or text input
+- Popup states (`show_help`, `show_org_selector`, `error`) overlay the main content
+- Each view has a `StatefulList` for selection tracking
+
+## NEO Chat Implementation
+
+### Polling Mechanism
+The NEO chat uses async polling to fetch agent responses:
+- **Active polling** (after sending message): Every 500ms (5 ticks at 100ms tick rate)
+- **Background polling** (when viewing NEO tab): Every 3 seconds (30 ticks)
+- **Immediate poll**: Triggered right after task creation
+- **Stop conditions** for active polling:
+  - 10 consecutive stable polls (~5 seconds) with no new messages AND has assistant response
+  - OR max 60 polls (~30 seconds timeout)
+
+### Key State Variables (in `App`)
+- `neo_polling: bool` - Whether actively polling for responses (fast polling after sending)
+- `neo_poll_counter: u8` - Ticks since last poll
+- `neo_stable_polls: u8` - Consecutive polls with no new messages
+- `neo_bg_poll_counter: u8` - Background poll counter when NEO tab is active
+- `neo_scroll_state: ScrollViewState` - Scroll state from tui-scrollview crate
+- `neo_auto_scroll: Arc<AtomicBool>` - Thread-safe auto-scroll toggle
+
+### Scrolling Implementation (using tui-scrollview)
+Uses `tui-scrollview` crate for proper scroll handling (similar to Tenere LLM TUI):
+- `ScrollViewState` manages scroll position with proper `scroll_to_bottom()` method
+- `Arc<AtomicBool>` for thread-safe auto-scroll toggle (pattern from Tenere)
+- Auto-scroll enabled by default, disabled when user scrolls up manually
+- Re-enabled when user presses `G` or new messages arrive with auto-scroll on
+
+Key methods used:
+- `scroll_state.scroll_up()` / `scroll_down()` - Single line movement
+- `scroll_state.scroll_page_up()` / `scroll_page_down()` - Page movement
+- `scroll_state.scroll_to_top()` / `scroll_to_bottom()` - Jump to edges
+- `scroll_state.offset()` - Get current scroll position for scrollbar
+
+### Thinking Indicator
+- Dedicated 2-line area shown between chat and input when `is_loading` or `neo_polling` is true
+- Displays animated spinner with "NEO is thinking..." message
+- Centered with background highlight for visibility
+
+### Markdown Rendering
+Assistant messages support markdown rendering:
+- **Bold** (`**text**` or `__text__`)
+- *Italic* (`*text*` or `_text_`)
+- `Inline code` (backticks)
+- Code blocks with language labels (triple backticks)
+- Headers (`#`, `##`, `###`)
+- Bullet lists (`-` or `*`)
+- Numbered lists (`1.`, `2.`, etc.)
+
+### NEO Tab Key Bindings
+| Key | Action |
+|-----|--------|
+| `i` | Enter input mode to type message |
+| `n` | Start new task/conversation |
+| `↑`/`↓` | Navigate task list (left panel) |
+| `j` | Scroll chat down 3 lines (newer) |
+| `k` | Scroll chat up 3 lines (older) + disable auto-scroll |
+| `J`/`PageDown` | Scroll chat down by page |
+| `K`/`PageUp` | Scroll chat up by page + disable auto-scroll |
+| `g` | Jump to top (oldest messages) + disable auto-scroll |
+| `G` | Jump to bottom + re-enable auto-scroll |
+| `Enter` | Load selected task's messages |
+
+### Message Types (`NeoMessageType`)
+- `UserMessage` - User input
+- `AssistantMessage` - NEO's response (may include tool_calls, rendered with markdown)
+- `ToolCall` - Tool execution notification
+- `ToolResponse` - Tool result (truncated display)
+- `ApprovalRequest` - Requires user approval
+- `TaskNameChange` - Task renamed by agent
+
+## Ratatui LLM Chat Best Practices
+
+When building LLM chat interfaces with Ratatui:
+
+1. **Use tui-scrollview** for scrolling: Manual scroll calculation with `Paragraph::scroll()` doesn't handle wrapped lines correctly. The `tui-scrollview` crate provides proper `ScrollViewState` with `scroll_to_bottom()`.
+
+2. **Auto-scroll pattern**: Use `Arc<AtomicBool>` for thread-safe auto-scroll toggle (pattern from Tenere). Enable on send/receive, disable on manual scroll up, re-enable on scroll to bottom.
+
+3. **Thinking indicator**: Use a dedicated layout area (not inline with messages) for loading/thinking state. This ensures visibility regardless of scroll position.
+
+4. **Background polling**: When tab is active, poll periodically (every few seconds) to catch updates without requiring manual refresh.
+
+5. **Reference implementations**:
+   - [Tenere](https://github.com/pythops/tenere) - LLM TUI with auto-scroll, streaming
+   - [Oatmeal](https://github.com/dustinblackman/oatmeal) - LLM chat with multiple backends
+   - [tui-scrollview](https://github.com/joshka/tui-scrollview) - ScrollView widget for Ratatui
