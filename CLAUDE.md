@@ -101,11 +101,69 @@ Event body types in responses:
 
 ## Architecture Overview
 
-This is a terminal UI (TUI) application for Pulumi Cloud built with Ratatui and Tokio.
+This is a terminal UI (TUI) application for Pulumi Cloud built with Ratatui and Tokio. The architecture follows **The Elm Architecture (TEA)** pattern for clear separation of concerns.
+
+### Project Structure
+
+```
+src/
+├── app/                    # Application core (TEA pattern)
+│   ├── mod.rs              # App struct, new(), run(), render() (~530 lines)
+│   ├── types.rs            # Model: Tab, FocusMode, PlatformView, AppState (~205 lines)
+│   ├── handlers.rs         # Update: All keyboard event handlers (~615 lines)
+│   ├── data.rs             # Data loading & refresh logic (~305 lines)
+│   └── neo.rs              # Neo AI agent async operations (~270 lines)
+├── api/                    # Pulumi Cloud API client
+│   ├── mod.rs              # Re-exports
+│   ├── client.rs           # HTTP client implementation
+│   └── types.rs            # API response types
+├── components/             # Reusable UI widgets
+│   ├── list.rs             # StatefulList<T>
+│   ├── input.rs            # TextInput
+│   └── spinner.rs          # Loading spinner
+├── ui/                     # View layer (rendering)
+│   ├── dashboard.rs        # Dashboard view
+│   ├── stacks.rs           # Stacks view
+│   ├── esc.rs              # ESC environments view
+│   ├── neo.rs              # Neo chat view
+│   ├── platform.rs         # Platform view
+│   └── ...                 # Other UI components
+├── config.rs               # User configuration
+├── event.rs                # Async event handler
+├── logging.rs              # File-based logging
+├── startup.rs              # Startup checks
+├── theme.rs                # UI theme/colors
+├── tui.rs                  # Terminal setup/teardown
+└── main.rs                 # Entry point
+```
+
+### The Elm Architecture (TEA) Pattern
+
+The application follows TEA principles:
+
+1. **Model** (`app/types.rs`): Pure data types defining application state
+   - `AppState` - All fetched data (stacks, environments, tasks, etc.)
+   - `Tab`, `FocusMode`, `PlatformView` - UI state enums
+   - `DataLoadResult`, `NeoAsyncResult` - Async operation results
+
+2. **Update** (`app/handlers.rs`): Event handlers that modify state
+   - `handle_key()` - Main keyboard event dispatcher
+   - `handle_stacks_key()`, `handle_esc_key()`, `handle_neo_key()`, etc.
+   - Pure functions that take current state and produce new state
+
+3. **View** (`app/mod.rs` + `ui/`): Renders state to terminal
+   - `render()` method produces UI from current state
+   - `ui/` module contains view-specific rendering functions
 
 ### Core Components
 
-- **App** (`src/app.rs`): Central state machine managing UI state, data, and the main event loop. Contains `AppState` for data and handles keyboard events via tab-specific handlers.
+- **App** (`src/app/mod.rs`): Central state machine managing UI state, data, and the main event loop. Contains `AppState` for data.
+
+- **Handlers** (`src/app/handlers.rs`): All keyboard event handling, organized by context (global, tab-specific, popup-specific).
+
+- **Data** (`src/app/data.rs`): Async data loading with parallel requests using tokio channels.
+
+- **Neo** (`src/app/neo.rs`): Neo AI agent operations including polling, message sending, and task management.
 
 - **API Client** (`src/api/client.rs`): Async HTTP client for Pulumi Cloud REST API. Handles authentication via bearer token and provides methods for Stacks, ESC, NEO, and Resource Search APIs.
 
@@ -120,6 +178,7 @@ Views in `src/ui/` render to Ratatui frames:
 - `stacks.rs` - Stack list and update history
 - `esc.rs` - ESC environments with YAML/resolved values
 - `neo.rs` - Chat interface for Pulumi's AI agent
+- `platform.rs` - Services, Components, Templates views
 - `header.rs` - Tab bar with organization display
 - `help.rs` - Keyboard shortcut overlay
 
@@ -134,7 +193,7 @@ Views in `src/ui/` render to Ratatui frames:
 1. `main.rs` initializes color-eyre, tracing, creates `App`, and calls `app.run()`
 2. `App::new()` sets up terminal, event handler, API client, loads initial data
 3. `App::run()` enters async loop: render frame → poll events → handle input
-4. Tab-specific key handlers (`handle_stacks_key`, `handle_esc_key`, `handle_neo_key`) manage view interactions
+4. `handlers.rs` dispatches to tab-specific handlers (`handle_stacks_key`, `handle_esc_key`, `handle_neo_key`)
 5. API calls are async and set `is_loading` flag during requests
 
 ### State Management
