@@ -577,15 +577,15 @@ impl App {
                     self.splash_dont_show_again = !self.splash_dont_show_again;
                 }
             }
-            // Enter dismisses the splash (only if checks passed and not loading)
+            // Enter dismisses the splash (only if checks passed)
             KeyCode::Enter => {
-                if checks_complete && checks_passed && !self.is_loading {
+                if checks_complete && checks_passed {
                     self.dismiss_splash();
                 }
             }
-            // Escape also dismisses (only if checks passed and not loading)
+            // Escape also dismisses (only if checks passed)
             KeyCode::Esc => {
-                if checks_complete && checks_passed && !self.is_loading {
+                if checks_complete && checks_passed {
                     self.dismiss_splash();
                 }
             }
