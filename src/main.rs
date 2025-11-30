@@ -22,8 +22,8 @@ async fn main() -> Result<()> {
     // Initialize error handling
     color_eyre::install()?;
 
-    // Initialize tracing to file (so it doesn't interfere with TUI)
-    logging::init_file_logging()?;
+    // Initialize tui-logger for in-app log viewing
+    logging::init_logging()?;
 
     // Create and run the application
     let mut app = App::new().await?;

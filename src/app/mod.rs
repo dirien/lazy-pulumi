@@ -25,6 +25,7 @@ use crate::api::{
     Stack,
 };
 use crate::components::{Spinner, StatefulList, TextEditor, TextInput};
+use tui_logger::TuiWidgetState;
 use crate::config::Config;
 use crate::event::{Event, EventHandler};
 use crate::startup::{check_pulumi_cli, check_pulumi_token, StartupChecks};
@@ -76,14 +77,8 @@ pub struct App {
     /// Show logs popup
     pub(super) show_logs: bool,
 
-    /// Log viewer scroll offset
-    pub(super) logs_scroll_offset: usize,
-
-    /// Log viewer word wrap enabled
-    pub(super) logs_word_wrap: bool,
-
-    /// Cached log lines
-    pub(super) logs_cache: Vec<String>,
+    /// tui-logger widget state
+    pub(super) logger_state: TuiWidgetState,
 
     /// Organization list for selector
     pub(super) org_list: StatefulList<String>,
@@ -189,7 +184,7 @@ impl App {
         let client = match PulumiClient::new() {
             Ok(c) => Some(c),
             Err(e) => {
-                tracing::warn!("Failed to create API client: {}", e);
+                log::warn!("Failed to create API client: {}", e);
                 None
             }
         };
@@ -221,9 +216,7 @@ impl App {
             show_help: false,
             show_org_selector: false,
             show_logs: false,
-            logs_scroll_offset: 0,
-            logs_word_wrap: false,
-            logs_cache: Vec::new(),
+            logger_state: TuiWidgetState::new(),
             org_list: StatefulList::new(),
             is_loading: false,
             spinner: Spinner::new(),
@@ -362,9 +355,7 @@ impl App {
         let show_esc_editor = self.show_esc_editor;
         let esc_editor = &self.esc_editor;
         let esc_editing_env = self.esc_editing_env.clone();
-        let logs_scroll_offset = self.logs_scroll_offset;
-        let logs_word_wrap = self.logs_word_wrap;
-        let logs_cache = &self.logs_cache;
+        let logger_state = &self.logger_state;
         let is_loading = self.is_loading;
         // For Neo tab, show spinner when polling (waiting for response)
         // Also show if task status indicates it's still running (even if polling stopped)
@@ -501,7 +492,7 @@ impl App {
 
             // Logs popup
             if show_logs {
-                ui::render_logs(frame, theme, logs_cache, logs_scroll_offset, logs_word_wrap);
+                ui::render_logs(frame, theme, logger_state);
             }
 
             // Neo task details popup
@@ -550,7 +541,7 @@ impl App {
         }
 
         if self.show_logs {
-            return "j/k: scroll | g/G: top/bottom | w: wrap | R: refresh | l/Esc: close"
+            return "h:targets | f:focus | +/-:capture | </>:show | PgUp/Dn:scroll | Space:hide off | l/Esc:close"
                 .to_string();
         }
 

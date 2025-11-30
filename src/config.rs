@@ -48,12 +48,12 @@ impl Config {
                     match serde_json::from_str(&contents) {
                         Ok(config) => return config,
                         Err(e) => {
-                            tracing::warn!("Failed to parse config: {}", e);
+                            log::warn!("Failed to parse config: {}", e);
                         }
                     }
                 }
                 Err(e) => {
-                    tracing::warn!("Failed to read config: {}", e);
+                    log::warn!("Failed to read config: {}", e);
                 }
             }
         }
@@ -69,11 +69,11 @@ impl Config {
         match serde_json::to_string_pretty(self) {
             Ok(contents) => {
                 if let Err(e) = fs::write(&path, contents) {
-                    tracing::warn!("Failed to save config: {}", e);
+                    log::warn!("Failed to save config: {}", e);
                 }
             }
             Err(e) => {
-                tracing::warn!("Failed to serialize config: {}", e);
+                log::warn!("Failed to serialize config: {}", e);
             }
         }
     }
