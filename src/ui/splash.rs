@@ -1,6 +1,6 @@
 //! Splash screen rendering
 //!
-//! Displays the Pulumi logo with "Lazy Pulumi" title.
+//! Displays the Pulumi logo with "Lazy Pulumi" title and startup checklist.
 //! The logo scales to fit the terminal while maintaining aspect ratio.
 
 use image::{DynamicImage, GenericImageView, Rgba};
@@ -13,6 +13,7 @@ use ratatui::{
 };
 use std::sync::OnceLock;
 
+use crate::startup::{CheckStatus, StartupChecks};
 use crate::theme::Theme;
 
 /// Application version from Cargo.toml
@@ -71,24 +72,25 @@ fn rgba_to_color(pixel: Rgba<u8>) -> Option<Color> {
     Some(Color::Rgb(r, g, b))
 }
 
-/// Render the splash screen
+/// Render the splash screen with startup checklist
 pub fn render_splash(
     frame: &mut Frame,
     theme: &Theme,
     spinner_char: &str,
     dont_show_again: bool,
-    is_loading: bool,
+    checks: &StartupChecks,
 ) {
     let area = frame.area();
     let img = get_image();
 
-    // Reserve space for title, version, loading, checkbox, and spacing
+    // Reserve space for title, version, checklist, action hint, checkbox, and spacing
     let title_height: u16 = 1;
     let version_height: u16 = 1;
+    let checklist_height: u16 = 4; // 2 checks with status
+    let action_height: u16 = 2;
     let checkbox_height: u16 = 3;
-    let loading_height: u16 = 2;
-    let spacing: u16 = 8; // Total spacing between elements
-    let reserved_height = title_height + version_height + checkbox_height + loading_height + spacing;
+    let spacing: u16 = 10; // Total spacing between elements
+    let reserved_height = title_height + version_height + checklist_height + action_height + checkbox_height + spacing;
 
     // Calculate available space for the logo
     let available_height = area.height.saturating_sub(reserved_height);
@@ -143,7 +145,9 @@ pub fn render_splash(
             Constraint::Length(1), // spacing
             Constraint::Length(version_height),
             Constraint::Length(2), // spacing
-            Constraint::Length(loading_height),
+            Constraint::Length(checklist_height),
+            Constraint::Length(2), // spacing
+            Constraint::Length(action_height),
             Constraint::Length(2), // spacing
             Constraint::Length(checkbox_height),
             Constraint::Min(0),
@@ -187,57 +191,129 @@ pub fn render_splash(
 
     frame.render_widget(version_paragraph, chunks[5]);
 
-    // Render loading indicator or "Press any key" message
-    let loading_text = if is_loading {
-        Line::from(vec![
-            Span::styled(format!("{} ", spinner_char), theme.primary()),
-            Span::styled("Loading...", Style::default().fg(theme.text_muted)),
-        ])
+    // Render startup checklist
+    let checklist_lines = render_checklist(theme, spinner_char, checks);
+    let checklist_paragraph = Paragraph::new(checklist_lines)
+        .alignment(Alignment::Center);
+
+    frame.render_widget(checklist_paragraph, chunks[7]);
+
+    // Render action hint (press enter to continue, or error message)
+    let action_lines = render_action_hint(theme, checks);
+    let action_paragraph = Paragraph::new(action_lines)
+        .alignment(Alignment::Center);
+
+    frame.render_widget(action_paragraph, chunks[9]);
+
+    // Render checkbox (only if checks passed)
+    if checks.all_passed() {
+        let checkbox_icon = if dont_show_again { "[x]" } else { "[ ]" };
+        let checkbox_line = Line::from(vec![
+            Span::styled(
+                checkbox_icon,
+                Style::default().fg(theme.primary).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                " Don't show this again",
+                Style::default().fg(theme.text_secondary),
+            ),
+        ]);
+
+        let hint_line = Line::from(vec![
+            Span::styled(
+                "Press ",
+                Style::default().fg(theme.text_muted),
+            ),
+            Span::styled(
+                "Space",
+                Style::default().fg(theme.primary).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                " to toggle",
+                Style::default().fg(theme.text_muted),
+            ),
+        ]);
+
+        let checkbox_paragraph = Paragraph::new(vec![checkbox_line, hint_line])
+            .alignment(Alignment::Center);
+
+        frame.render_widget(checkbox_paragraph, chunks[11]);
+    }
+}
+
+/// Render the startup checklist items
+fn render_checklist(theme: &Theme, spinner_char: &str, checks: &StartupChecks) -> Vec<Line<'static>> {
+    vec![
+        render_check_line(theme, spinner_char, &checks.token_check.name, &checks.token_check.status),
+        render_check_line(theme, spinner_char, &checks.cli_check.name, &checks.cli_check.status),
+    ]
+}
+
+/// Render a single check line
+fn render_check_line(theme: &Theme, spinner_char: &str, name: &str, status: &CheckStatus) -> Line<'static> {
+    let (icon, icon_style, detail) = match status {
+        CheckStatus::Pending => (
+            "○".to_string(),
+            Style::default().fg(theme.text_muted),
+            "Waiting...".to_string(),
+        ),
+        CheckStatus::Running => (
+            spinner_char.to_string(),
+            Style::default().fg(theme.colors.yellow),
+            "Checking...".to_string(),
+        ),
+        CheckStatus::Passed(msg) => (
+            "✓".to_string(),
+            Style::default().fg(theme.success),
+            msg.clone(),
+        ),
+        CheckStatus::Failed(msg) => (
+            "✗".to_string(),
+            Style::default().fg(theme.colors.salmon),
+            msg.clone(),
+        ),
+    };
+
+    let detail_style = match status {
+        CheckStatus::Failed(_) => Style::default().fg(theme.colors.salmon),
+        CheckStatus::Passed(_) => Style::default().fg(theme.text_muted),
+        _ => Style::default().fg(theme.text_muted),
+    };
+
+    Line::from(vec![
+        Span::styled(format!("{} ", icon), icon_style),
+        Span::styled(format!("{}: ", name), Style::default().fg(theme.text_secondary)),
+        Span::styled(detail, detail_style),
+    ])
+}
+
+/// Render the action hint based on check status
+fn render_action_hint(theme: &Theme, checks: &StartupChecks) -> Vec<Line<'static>> {
+    if checks.any_running() || !checks.all_complete() {
+        // Still running checks
+        vec![Line::from(vec![
+            Span::styled("Running startup checks...", Style::default().fg(theme.text_muted)),
+        ])]
+    } else if checks.any_failed() {
+        // Checks failed - only allow quitting
+        vec![
+            Line::from(vec![
+                Span::styled("Startup checks failed", Style::default().fg(theme.colors.salmon).add_modifier(Modifier::BOLD)),
+            ]),
+            Line::from(vec![
+                Span::styled("Press ", Style::default().fg(theme.text_muted)),
+                Span::styled("q", Style::default().fg(theme.colors.salmon).add_modifier(Modifier::BOLD)),
+                Span::styled(" to quit", Style::default().fg(theme.text_muted)),
+            ]),
+        ]
     } else {
-        Line::from(vec![
+        // All checks passed
+        vec![Line::from(vec![
             Span::styled("Press ", Style::default().fg(theme.text_muted)),
             Span::styled("Enter", Style::default().fg(theme.primary).add_modifier(Modifier::BOLD)),
             Span::styled(" to continue", Style::default().fg(theme.text_muted)),
-        ])
-    };
-
-    let loading_paragraph = Paragraph::new(loading_text)
-        .alignment(Alignment::Center);
-
-    frame.render_widget(loading_paragraph, chunks[7]);
-
-    // Render checkbox
-    let checkbox_icon = if dont_show_again { "[x]" } else { "[ ]" };
-    let checkbox_line = Line::from(vec![
-        Span::styled(
-            checkbox_icon,
-            Style::default().fg(theme.primary).add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(
-            " Don't show this again",
-            Style::default().fg(theme.text_secondary),
-        ),
-    ]);
-
-    let hint_line = Line::from(vec![
-        Span::styled(
-            "Press ",
-            Style::default().fg(theme.text_muted),
-        ),
-        Span::styled(
-            "Space",
-            Style::default().fg(theme.primary).add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(
-            " to toggle",
-            Style::default().fg(theme.text_muted),
-        ),
-    ]);
-
-    let checkbox_paragraph = Paragraph::new(vec![checkbox_line, hint_line])
-        .alignment(Alignment::Center);
-
-    frame.render_widget(checkbox_paragraph, chunks[9]);
+        ])]
+    }
 }
 
 /// Convert a row of pixels to a Line with colored spans

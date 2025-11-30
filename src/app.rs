@@ -8,12 +8,13 @@ use crossterm::event::{KeyCode, KeyEvent};
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::process::Command;
 use tokio::sync::mpsc;
 use tui_scrollview::ScrollViewState;
 
 use crate::config::Config;
+use crate::startup::{check_pulumi_cli, check_pulumi_token, CheckStatus, StartupChecks};
 
 use crate::api::{
     EscEnvironmentSummary, NeoMessage, NeoMessageType, NeoTask, PulumiClient, RegistryPackage,
@@ -241,14 +242,14 @@ pub struct App {
     /// Show splash screen on startup
     show_splash: bool,
 
-    /// Splash screen start time (for minimum display duration)
-    splash_start_time: Option<Instant>,
-
-    /// Minimum splash screen duration in seconds
-    splash_min_duration: Duration,
-
     /// Whether the "don't show again" checkbox is selected
     splash_dont_show_again: bool,
+
+    /// Startup checks state
+    startup_checks: StartupChecks,
+
+    /// Whether startup checks have been initiated
+    startup_checks_started: bool,
 
     /// User configuration
     config: Config,
@@ -409,9 +410,9 @@ impl App {
             tab: Tab::Dashboard,
             focus: FocusMode::Normal,
             show_splash,
-            splash_start_time: if show_splash { Some(Instant::now()) } else { None },
-            splash_min_duration: Duration::from_secs(5),
             splash_dont_show_again: false,
+            startup_checks: StartupChecks::default(),
+            startup_checks_started: false,
             config,
             show_help: false,
             show_org_selector: false,
@@ -452,8 +453,18 @@ impl App {
             pending_data_loads: 0,
         };
 
-        // Initial data load
-        app.load_initial_data().await;
+        // If splash is not shown, run startup checks and load data immediately
+        if !show_splash {
+            // Run startup checks synchronously
+            app.startup_checks.token_check.status = check_pulumi_token();
+            app.startup_checks.cli_check.status = check_pulumi_cli().await;
+            app.startup_checks_started = true;
+
+            // Only load data if checks passed
+            if app.startup_checks.all_passed() {
+                app.load_initial_data().await;
+            }
+        }
 
         Ok(app)
     }
@@ -637,6 +648,11 @@ impl App {
     /// Main run loop
     pub async fn run(&mut self) -> Result<()> {
         while !self.should_quit {
+            // Run startup checks if showing splash and not started yet
+            if self.show_splash && !self.startup_checks_started {
+                self.run_startup_checks().await;
+            }
+
             // Render
             self.render()?;
 
@@ -861,6 +877,7 @@ impl App {
         let org = self.state.organization.as_deref();
         let show_splash = self.show_splash;
         let splash_dont_show_again = self.splash_dont_show_again;
+        let startup_checks = self.startup_checks.clone();
         let show_help = self.show_help;
         let show_org_selector = self.show_org_selector;
         let show_logs = self.show_logs;
@@ -910,9 +927,9 @@ impl App {
                 None
             };
 
-            // Show splash screen (minimum 5 seconds or until dismissed)
+            // Show splash screen with startup checklist
             if show_splash {
-                ui::render_splash(frame, theme, spinner_char, splash_dont_show_again, is_loading);
+                ui::render_splash(frame, theme, spinner_char, splash_dont_show_again, &startup_checks);
                 return;
             }
 
@@ -1714,33 +1731,60 @@ impl App {
         }
     }
 
+    /// Run startup checks asynchronously
+    async fn run_startup_checks(&mut self) {
+        self.startup_checks_started = true;
+
+        // Run token check first (synchronous)
+        self.startup_checks.token_check.status = CheckStatus::Running;
+        // Render to show running state
+        let _ = self.render();
+        self.startup_checks.token_check.status = check_pulumi_token();
+
+        // Run CLI check (async)
+        self.startup_checks.cli_check.status = CheckStatus::Running;
+        // Render to show running state
+        let _ = self.render();
+        self.startup_checks.cli_check.status = check_pulumi_cli().await;
+
+        // If all checks passed, load initial data
+        if self.startup_checks.all_passed() {
+            self.load_initial_data().await;
+        }
+    }
+
     /// Handle splash screen key events
     fn handle_splash_key(&mut self, key: KeyEvent) {
-        // Check if minimum time has passed
-        let min_time_passed = self.splash_start_time
-            .map(|start| start.elapsed() >= self.splash_min_duration)
-            .unwrap_or(true);
+        // Check if startup checks are complete
+        let checks_complete = self.startup_checks.all_complete();
+        let checks_passed = self.startup_checks.all_passed();
+        let checks_failed = self.startup_checks.any_failed();
 
         match key.code {
-            // Space toggles the "don't show again" checkbox
+            // Space toggles the "don't show again" checkbox (only if checks passed)
             KeyCode::Char(' ') => {
-                self.splash_dont_show_again = !self.splash_dont_show_again;
+                if checks_passed {
+                    self.splash_dont_show_again = !self.splash_dont_show_again;
+                }
             }
-            // Enter dismisses the splash (if min time passed and not loading)
+            // Enter dismisses the splash (only if checks passed and not loading)
             KeyCode::Enter => {
-                if min_time_passed && !self.is_loading {
+                if checks_complete && checks_passed && !self.is_loading {
                     self.dismiss_splash();
                 }
             }
-            // Escape also dismisses (if min time passed and not loading)
+            // Escape also dismisses (only if checks passed and not loading)
             KeyCode::Esc => {
-                if min_time_passed && !self.is_loading {
+                if checks_complete && checks_passed && !self.is_loading {
                     self.dismiss_splash();
                 }
             }
-            // q quits the application
+            // q quits the application (always available, especially when checks fail)
             KeyCode::Char('q') => {
-                self.should_quit = true;
+                // Always allow quitting, but especially important when checks fail
+                if checks_failed || checks_complete {
+                    self.should_quit = true;
+                }
             }
             _ => {}
         }
