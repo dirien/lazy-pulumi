@@ -252,7 +252,7 @@ impl App {
                     self.stacks_list.set_items(stacks);
                 }
                 DataLoadResult::EscEnvironments(envs) => {
-                    tracing::info!("Received {} ESC environments", envs.len());
+                    log::info!("Received {} ESC environments", envs.len());
                     self.state.esc_environments = envs.clone();
                     self.esc_list.set_items(envs);
                 }
@@ -296,7 +296,7 @@ impl App {
                     }
                 }
                 DataLoadResult::Error(e) => {
-                    tracing::warn!("Data load error: {}", e);
+                    log::warn!("Data load error: {}", e);
                 }
             }
 
@@ -335,7 +335,7 @@ impl App {
                                 .await;
                         }
                         Err(e) => {
-                            tracing::debug!("Failed to load README: {}", e);
+                            log::debug!("Failed to load README: {}", e);
                         }
                     }
                 });

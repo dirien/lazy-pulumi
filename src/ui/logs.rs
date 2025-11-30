@@ -1,141 +1,66 @@
-//! Log viewer popup rendering
+//! Log viewer popup rendering using tui-logger
 
 use ratatui::{
     prelude::*,
-    text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState},
+    widgets::{Block, Borders, Clear},
 };
+use tui_logger::{TuiLoggerSmartWidget, TuiWidgetState};
 
 use crate::theme::Theme;
 use crate::ui::centered_rect;
 
-/// Render the logs popup
+/// Render the logs popup using TuiLoggerSmartWidget
 pub fn render_logs(
     frame: &mut Frame,
     theme: &Theme,
-    log_lines: &[String],
-    scroll_offset: usize,
-    word_wrap: bool,
+    logger_state: &TuiWidgetState,
 ) {
     let area = centered_rect(90, 85, frame.area());
 
     // Clear background
     frame.render_widget(Clear, area);
 
-    let wrap_indicator = if word_wrap { "wrap:ON" } else { "wrap:OFF" };
-    let title = format!(" Logs [w:{}] (l:close, j/k:scroll, g/G:top/bottom, R:refresh) ", wrap_indicator);
+    // Move events from hot buffer to widget buffer
+    tui_logger::move_events();
 
-    let block = Block::default()
+    let title = " Logs (h:toggle targets | f:focus | +/-:capture | </>:show | PgUp/Dn:scroll | Esc:close) ";
+
+    // Create the smart widget with target selector and log view
+    // Style it to match the Dracula theme
+    let logger_widget = TuiLoggerSmartWidget::default()
+        // Log level colors matching the theme
+        .style_error(theme.error())
+        .style_warn(theme.warning())
+        .style_info(theme.info())
+        .style_debug(theme.text_muted())
+        .style_trace(theme.text_muted())
+        // Output formatting
+        .output_separator('|')
+        .output_timestamp(Some("%H:%M:%S".to_string()))
+        .output_level(Some(tui_logger::TuiLoggerLevelOutput::Abbreviated))
+        .output_target(true)
+        .output_file(false)
+        .output_line(false)
+        // Panel titles
+        .title_log(" Messages ")
+        .title_target(" Targets ")
+        // Border styling - use theme's border color instead of default white
+        .border_style(theme.border())
+        .border_type(ratatui::widgets::BorderType::Rounded)
+        // Highlight style for selected target
+        .highlight_style(theme.selected())
+        // Connect to state
+        .state(logger_state);
+
+    // Create outer block with theme styling
+    let outer_block = Block::default()
         .borders(Borders::ALL)
         .border_style(theme.border_focused())
+        .border_type(ratatui::widgets::BorderType::Rounded)
         .title(title)
         .title_style(theme.title());
 
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-
-    let visible_width = inner.width as usize;
-    let visible_height = inner.height as usize;
-
-    // When word wrap is enabled, we need to calculate wrapped line count
-    let (display_lines, total_display_lines) = if word_wrap {
-        // Calculate total wrapped lines and create display content
-        let mut wrapped_lines: Vec<(String, Style)> = Vec::new();
-
-        for line in log_lines.iter() {
-            let style = get_line_style(line, theme);
-
-            if line.is_empty() {
-                wrapped_lines.push((String::new(), style));
-            } else {
-                // Wrap the line manually
-                let chars: Vec<char> = line.chars().collect();
-                let mut start = 0;
-                while start < chars.len() {
-                    let end = (start + visible_width).min(chars.len());
-                    let segment: String = chars[start..end].iter().collect();
-                    wrapped_lines.push((segment, style));
-                    start = end;
-                }
-            }
-        }
-
-        let total = wrapped_lines.len();
-
-        // Clamp scroll offset
-        let max_scroll = total.saturating_sub(visible_height);
-        let scroll = scroll_offset.min(max_scroll);
-
-        // Get visible wrapped lines
-        let visible: Vec<Line> = wrapped_lines
-            .into_iter()
-            .skip(scroll)
-            .take(visible_height)
-            .map(|(text, style)| Line::from(Span::styled(text, style)))
-            .collect();
-
-        (visible, total)
-    } else {
-        // No wrapping - use original lines
-        let total = log_lines.len();
-
-        // Clamp scroll offset
-        let max_scroll = total.saturating_sub(visible_height);
-        let scroll = scroll_offset.min(max_scroll);
-
-        let visible: Vec<Line> = log_lines
-            .iter()
-            .skip(scroll)
-            .take(visible_height)
-            .map(|line| {
-                let style = get_line_style(line, theme);
-                Line::from(Span::styled(line.as_str(), style))
-            })
-            .collect();
-
-        (visible, total)
-    };
-
-    let logs_para = Paragraph::new(display_lines);
-    frame.render_widget(logs_para, inner);
-
-    // Render scrollbar if needed
-    if total_display_lines > visible_height {
-        let scrollbar = Scrollbar::default()
-            .orientation(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(Some("↑"))
-            .end_symbol(Some("↓"));
-
-        // Calculate scroll position for scrollbar
-        let max_scroll = total_display_lines.saturating_sub(visible_height);
-        let scroll = scroll_offset.min(max_scroll);
-
-        let mut scrollbar_state = ScrollbarState::new(total_display_lines)
-            .position(scroll)
-            .viewport_content_length(visible_height);
-
-        frame.render_stateful_widget(
-            scrollbar,
-            inner.inner(Margin {
-                vertical: 1,
-                horizontal: 0,
-            }),
-            &mut scrollbar_state,
-        );
-    }
-}
-
-/// Get the style for a log line based on its content
-fn get_line_style(line: &str, theme: &Theme) -> Style {
-    if line.contains("ERROR") || line.contains("error") {
-        theme.error()
-    } else if line.contains("WARN") || line.contains("warn") {
-        theme.warning()
-    } else if line.contains("INFO") || line.contains("info") {
-        theme.info()
-    } else if line.contains("DEBUG") || line.contains("debug") {
-        theme.text_muted()
-    } else {
-        theme.text()
-    }
+    let inner = outer_block.inner(area);
+    frame.render_widget(outer_block, area);
+    frame.render_widget(logger_widget, inner);
 }

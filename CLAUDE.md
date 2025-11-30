@@ -23,28 +23,39 @@ RUST_LOG=debug cargo run --release
 
 ## Logging
 
-Logs are written to a file instead of stdout to avoid interfering with the TUI:
-- **Log file location**: `~/.cache/lazy-pulumi/app.log`
-- Press `l` globally to open the log viewer popup
-- Logs are color-coded by level (ERROR=red, WARN=yellow, INFO=blue, DEBUG=muted)
+The application uses `tui-logger` for integrated in-app log viewing. Press `l` globally to open the log viewer popup.
+
+### Log Viewer Features
+- **Smart Widget**: Combined target selector (left) and log messages view (right)
+- **Target filtering**: Filter logs by module/target with real-time level control
+- **Scrollback**: Navigate through log history with page mode
+- **Log levels**: Color-coded ERROR (red), WARN (yellow), INFO (blue), DEBUG/TRACE (muted)
 
 ### Log Viewer Key Bindings
 | Key | Action |
 |-----|--------|
 | `l` or `Esc` | Close logs |
-| `w` | Toggle word wrap on/off |
-| `j` / `↓` | Scroll down 3 lines |
-| `k` / `↑` | Scroll up 3 lines |
-| `J` / `PageDown` | Scroll down by page |
-| `K` / `PageUp` | Scroll up by page |
-| `g` | Jump to top |
-| `G` | Jump to bottom |
-| `R` | Refresh logs |
+| `h` | Toggle target selector panel visibility |
+| `f` | Toggle focus on selected target only |
+| `↑` / `↓` | Select previous/next target |
+| `←` or `<` | Reduce SHOWN log level for target |
+| `→` or `>` | Increase SHOWN log level for target |
+| `-` | Reduce CAPTURED log level for target |
+| `+` or `=` | Increase CAPTURED log level for target |
+| `PageUp` | Enter page mode, scroll up in history |
+| `PageDown` | Scroll down in history (page mode only) |
+| `Space` | Toggle hiding targets with logfilter off |
+
+### Target Selector Columns
+The target selector shows two columns (EWIDT = Error, Warn, Info, Debug, Trace):
+- **Inverted letters**: Log levels shown in the messages view
+- **Normal letters**: Log levels being captured by the logger
+- If a letter is missing, that level is not captured
 
 ### Implementation
-- `src/logging.rs` - File-based logging initialization and log reading
-- `src/ui/logs.rs` - Log viewer popup rendering with word wrap support
-- Logs are cached when viewer opens; press `R` to reload from file
+- `src/logging.rs` - tui-logger initialization using `log` crate
+- `src/ui/logs.rs` - TuiLoggerSmartWidget rendering
+- Uses `TuiWidgetState` for managing filter state and scroll position
 
 ## Required Environment Variables
 
@@ -132,7 +143,7 @@ src/
 │   └── ...                 # Other UI components
 ├── config.rs               # User configuration
 ├── event.rs                # Async event handler
-├── logging.rs              # File-based logging
+├── logging.rs              # tui-logger initialization
 ├── startup.rs              # Startup checks
 ├── theme.rs                # UI theme/colors
 ├── tui.rs                  # Terminal setup/teardown
@@ -193,7 +204,7 @@ Views in `src/ui/` render to Ratatui frames:
 
 ### Application Flow
 
-1. `main.rs` initializes color-eyre, tracing, creates `App`, and calls `app.run()`
+1. `main.rs` initializes color-eyre, tui-logger, creates `App`, and calls `app.run()`
 2. `App::new()` sets up terminal, event handler, API client, loads initial data
 3. `App::run()` enters async loop: render frame → poll events → handle input
 4. `handlers.rs` dispatches to tab-specific handlers (`handle_stacks_key`, `handle_esc_key`, `handle_neo_key`)

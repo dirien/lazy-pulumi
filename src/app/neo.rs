@@ -113,7 +113,7 @@ impl App {
                         || self.neo_current_poll >= self.neo_max_polls
                         || (self.neo_stable_polls >= 20 && !task_is_running);
 
-                    tracing::debug!(
+                    log::debug!(
                         "Neo poll: status={:?}, running={}, stable={}, poll={}/{}, stop={}",
                         task_status, task_is_running, self.neo_stable_polls,
                         self.neo_current_poll, self.neo_max_polls, should_stop
@@ -178,7 +178,7 @@ impl App {
                                 .await;
                         }
                         Err(e) => {
-                            tracing::warn!("Failed to poll Neo task: {}", e);
+                            log::warn!("Failed to poll Neo task: {}", e);
                             // Don't send error for transient poll failures
                         }
                     }

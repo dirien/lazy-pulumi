@@ -5,10 +5,10 @@
 
 use crossterm::event::{KeyCode, KeyEvent};
 use std::sync::atomic::Ordering;
+use tui_logger::TuiWidgetEvent;
 use tui_scrollview::ScrollViewState;
 
 use crate::event::keys;
-use crate::logging;
 use crate::startup::{check_pulumi_cli, check_pulumi_token, CheckStatus};
 
 use super::types::{FocusMode, PlatformView, Tab};
@@ -91,10 +91,6 @@ impl App {
 
         // Open logs viewer with 'l'
         if keys::is_char(&key, 'l') {
-            self.logs_cache = logging::read_log_tail(None);
-            // Auto-scroll to bottom
-            let total_lines = self.logs_cache.len();
-            self.logs_scroll_offset = total_lines.saturating_sub(20);
             self.show_logs = true;
             return;
         }
@@ -163,37 +159,44 @@ impl App {
     }
 
     /// Handle logs popup keys
+    /// Maps keys to TuiWidgetEvent for the tui-logger smart widget
     fn handle_logs_key(&mut self, key: KeyEvent) {
+        // Close popup
         if keys::is_escape(&key) || keys::is_char(&key, 'l') {
             self.show_logs = false;
-        } else if keys::is_char(&key, 'w') {
-            // Toggle word wrap
-            self.logs_word_wrap = !self.logs_word_wrap;
-            // Reset scroll position when toggling wrap mode
-            self.logs_scroll_offset = 0;
-        } else if keys::is_char(&key, 'j') || keys::is_down(&key) {
-            // Scroll down
-            self.logs_scroll_offset = self.logs_scroll_offset.saturating_add(3);
-        } else if keys::is_char(&key, 'k') || keys::is_up(&key) {
-            // Scroll up
-            self.logs_scroll_offset = self.logs_scroll_offset.saturating_sub(3);
-        } else if keys::is_char(&key, 'g') {
-            // Jump to top
-            self.logs_scroll_offset = 0;
-        } else if keys::is_char(&key, 'G') {
-            // Jump to bottom
-            let total_lines = self.logs_cache.len();
-            self.logs_scroll_offset = total_lines.saturating_sub(20);
-        } else if keys::is_page_down(&key) || keys::is_char(&key, 'J') {
-            self.logs_scroll_offset = self.logs_scroll_offset.saturating_add(20);
-        } else if keys::is_page_up(&key) || keys::is_char(&key, 'K') {
-            self.logs_scroll_offset = self.logs_scroll_offset.saturating_sub(20);
-        } else if keys::is_char(&key, 'R') {
-            // Refresh logs
-            self.logs_cache = logging::read_log_tail(None);
-            // Auto-scroll to bottom on refresh
-            let total_lines = self.logs_cache.len();
-            self.logs_scroll_offset = total_lines.saturating_sub(20);
+            return;
+        }
+
+        // Map keys to TuiWidgetEvent
+        let event = match key.code {
+            // h: Toggle target selector widget hidden/visible
+            KeyCode::Char('h') => Some(TuiWidgetEvent::HideKey),
+            // f: Toggle focus on selected target only
+            KeyCode::Char('f') => Some(TuiWidgetEvent::FocusKey),
+            // UP: Select previous target in target selector
+            KeyCode::Up => Some(TuiWidgetEvent::UpKey),
+            // DOWN: Select next target in target selector
+            KeyCode::Down => Some(TuiWidgetEvent::DownKey),
+            // LEFT or '<': Reduce SHOWN log messages by one level
+            KeyCode::Left | KeyCode::Char('<') => Some(TuiWidgetEvent::LeftKey),
+            // RIGHT or '>': Increase SHOWN log messages by one level
+            KeyCode::Right | KeyCode::Char('>') => Some(TuiWidgetEvent::RightKey),
+            // '-': Reduce CAPTURED log messages by one level
+            KeyCode::Char('-') => Some(TuiWidgetEvent::MinusKey),
+            // '+' or '=': Increase CAPTURED log messages by one level
+            KeyCode::Char('+') | KeyCode::Char('=') => Some(TuiWidgetEvent::PlusKey),
+            // PAGEUP: Enter page mode and scroll up in log history
+            KeyCode::PageUp => Some(TuiWidgetEvent::PrevPageKey),
+            // PAGEDOWN: Scroll down in log history (only in page mode)
+            KeyCode::PageDown => Some(TuiWidgetEvent::NextPageKey),
+            // SPACE: Toggle hiding of targets with logfilter set to off
+            KeyCode::Char(' ') => Some(TuiWidgetEvent::SpaceKey),
+            // ESC handled above for closing
+            _ => None,
+        };
+
+        if let Some(evt) = event {
+            self.logger_state.transition(evt);
         }
     }
 
@@ -364,7 +367,7 @@ impl App {
                     self.is_loading = true;
                     self.spinner.set_message("Loading definition...");
 
-                    tracing::debug!(
+                    log::debug!(
                         "Loading ESC environment definition: org={}, project={}, name={}",
                         env.organization, env.project, env.name
                     );
@@ -376,10 +379,10 @@ impl App {
                         Ok(details) => {
                             self.state.selected_env_yaml = details.yaml;
                             self.esc_definition_scroll = ScrollViewState::default();
-                            tracing::debug!("ESC environment definition loaded successfully");
+                            log::debug!("ESC environment definition loaded successfully");
                         }
                         Err(e) => {
-                            tracing::error!("Failed to load ESC environment definition: {}", e);
+                            log::error!("Failed to load ESC environment definition: {}", e);
                             self.error = Some(format!("Failed to load definition: {}", e));
                         }
                     }
@@ -394,7 +397,7 @@ impl App {
                     self.is_loading = true;
                     self.spinner.set_message("Opening environment...");
 
-                    tracing::debug!(
+                    log::debug!(
                         "Opening ESC environment: org={}, project={}, name={}",
                         env.organization, env.project, env.name
                     );
@@ -406,10 +409,10 @@ impl App {
                         Ok(response) => {
                             self.state.selected_env_values = response.values;
                             self.esc_values_scroll = ScrollViewState::default();
-                            tracing::debug!("ESC environment opened and resolved successfully");
+                            log::debug!("ESC environment opened and resolved successfully");
                         }
                         Err(e) => {
-                            tracing::error!("Failed to open ESC environment: {}", e);
+                            log::error!("Failed to open ESC environment: {}", e);
                             self.error = Some(format!("Failed to open environment: {}", e));
                         }
                     }
@@ -438,7 +441,7 @@ impl App {
                                 details.yaml.unwrap_or_default()
                             }
                             Err(e) => {
-                                tracing::error!("Failed to load ESC environment definition: {}", e);
+                                log::error!("Failed to load ESC environment definition: {}", e);
                                 self.error = Some(format!("Failed to load definition: {}", e));
                                 self.is_loading = false;
                                 return;
@@ -481,12 +484,12 @@ impl App {
                             .await
                         {
                             Ok(_) => {
-                                tracing::info!("ESC environment saved successfully");
+                                log::info!("ESC environment saved successfully");
                                 // Update the cached YAML
                                 self.state.selected_env_yaml = Some(content);
                             }
                             Err(e) => {
-                                tracing::error!("Failed to save ESC environment: {}", e);
+                                log::error!("Failed to save ESC environment: {}", e);
                                 self.error = Some(format!("Failed to save: {}", e));
                             }
                         }

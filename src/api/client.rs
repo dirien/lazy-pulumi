@@ -315,26 +315,26 @@ impl PulumiClient {
                 None => format!("{}/api/esc/environments/{}", self.config.base_url, org),
             };
 
-            tracing::debug!("ESC environments: requesting URL: {}", url);
+            log::debug!("ESC environments: requesting URL: {}", url);
             let response = self.client.get(&url).send().await?;
 
             if !response.status().is_success() {
                 let status = response.status().as_u16();
                 let message = response.text().await.unwrap_or_default();
-                tracing::error!("ESC environments API error: {} - {}", status, message);
+                log::error!("ESC environments API error: {} - {}", status, message);
                 return Err(ApiError::ApiResponse { status, message });
             }
 
             let text = response.text().await?;
-            tracing::debug!("ESC environments API response: {}", &text[..text.len().min(1000)]);
+            log::debug!("ESC environments API response: {}", &text[..text.len().min(1000)]);
 
             let data: FlexibleEscResponse = serde_json::from_str(&text).map_err(|e| {
-                tracing::error!("Failed to parse ESC environments: {}. Response: {}", e, &text[..text.len().min(2000)]);
+                log::error!("Failed to parse ESC environments: {}. Response: {}", e, &text[..text.len().min(2000)]);
                 ApiError::Parse(format!("Failed to parse ESC environments: {}", e))
             })?;
 
             let fetched_count = data.environments.len();
-            tracing::info!(
+            log::info!(
                 "ESC environments: fetched {} environments, continuation_token: {:?}",
                 fetched_count,
                 data.continuation_token
@@ -356,7 +356,7 @@ impl PulumiClient {
             }
         }
 
-        tracing::info!("ESC environments: total {} environments fetched for org '{}'", all_environments.len(), org);
+        log::info!("ESC environments: total {} environments fetched for org '{}'", all_environments.len(), org);
         Ok(all_environments)
     }
 
@@ -373,7 +373,7 @@ impl PulumiClient {
             self.config.base_url, org, project, env
         );
 
-        tracing::debug!("GET ESC environment: {}", url);
+        log::debug!("GET ESC environment: {}", url);
         let response = self.client.get(&url).send().await?;
 
         if !response.status().is_success() {
@@ -383,7 +383,7 @@ impl PulumiClient {
         }
 
         let text = response.text().await?;
-        tracing::debug!("ESC environment details response: {}", &text[..text.len().min(500)]);
+        log::debug!("ESC environment details response: {}", &text[..text.len().min(500)]);
 
         // The API returns YAML content directly as text, not JSON
         // So we just return it as the yaml field
@@ -411,7 +411,7 @@ impl PulumiClient {
             self.config.base_url, org, project, env
         );
 
-        tracing::debug!("POST ESC environment open: {}", open_url);
+        log::debug!("POST ESC environment open: {}", open_url);
         let response = self.client.post(&open_url).send().await?;
 
         if !response.status().is_success() {
@@ -440,10 +440,10 @@ impl PulumiClient {
         }
 
         let text = response.text().await?;
-        tracing::debug!("ESC environment open response: {}", &text[..text.len().min(500)]);
+        log::debug!("ESC environment open response: {}", &text[..text.len().min(500)]);
 
         let open_response: OpenSessionResponse = serde_json::from_str(&text).map_err(|e| {
-            tracing::error!("Failed to parse ESC open response: {}. Response: {}", e, &text[..text.len().min(1000)]);
+            log::error!("Failed to parse ESC open response: {}. Response: {}", e, &text[..text.len().min(1000)]);
             ApiError::Parse(format!("Failed to parse open response: {}", e))
         })?;
 
@@ -459,7 +459,7 @@ impl PulumiClient {
                     })
                     .collect();
                 let combined = error_messages.join("; ");
-                tracing::warn!("ESC environment has diagnostics: {}", combined);
+                log::warn!("ESC environment has diagnostics: {}", combined);
                 return Err(ApiError::Parse(format!("Environment error: {}", combined)));
             }
         }
@@ -471,7 +471,7 @@ impl PulumiClient {
             _ => return Err(ApiError::Parse("No session ID returned - environment may have errors".to_string())),
         };
 
-        tracing::debug!("ESC environment session opened: id={}", session_id);
+        log::debug!("ESC environment session opened: id={}", session_id);
 
         // Step 2: Read the resolved values from the open session
         let read_url = format!(
@@ -479,7 +479,7 @@ impl PulumiClient {
             self.config.base_url, org, project, env, session_id
         );
 
-        tracing::debug!("GET ESC environment open values: {}", read_url);
+        log::debug!("GET ESC environment open values: {}", read_url);
         let values_response = self.client.get(&read_url).send().await?;
 
         if !values_response.status().is_success() {
@@ -489,11 +489,11 @@ impl PulumiClient {
         }
 
         let values_text = values_response.text().await?;
-        tracing::debug!("ESC environment values response: {}", &values_text[..values_text.len().min(500)]);
+        log::debug!("ESC environment values response: {}", &values_text[..values_text.len().min(500)]);
 
         // Parse the values as JSON
         let values: serde_json::Value = serde_json::from_str(&values_text).map_err(|e| {
-            tracing::error!("Failed to parse ESC values: {}. Response: {}", e, &values_text[..values_text.len().min(1000)]);
+            log::error!("Failed to parse ESC values: {}. Response: {}", e, &values_text[..values_text.len().min(1000)]);
             ApiError::Parse(format!("Failed to parse values: {}", e))
         })?;
 
@@ -517,7 +517,7 @@ impl PulumiClient {
             self.config.base_url, org, project, env
         );
 
-        tracing::debug!("PATCH ESC environment: {}", url);
+        log::debug!("PATCH ESC environment: {}", url);
 
         let response = self
             .client
@@ -530,11 +530,11 @@ impl PulumiClient {
         if !response.status().is_success() {
             let status = response.status().as_u16();
             let message = response.text().await.unwrap_or_default();
-            tracing::error!("ESC environment update error: {} - {}", status, message);
+            log::error!("ESC environment update error: {} - {}", status, message);
             return Err(ApiError::ApiResponse { status, message });
         }
 
-        tracing::info!("ESC environment updated successfully: {}/{}/{}", org, project, env);
+        log::info!("ESC environment updated successfully: {}/{}/{}", org, project, env);
         Ok(())
     }
 
@@ -585,12 +585,12 @@ impl PulumiClient {
             }
 
             let text = response.text().await?;
-            tracing::debug!("Neo tasks API response (first 500 chars): {}", &text[..text.len().min(500)]);
+            log::debug!("Neo tasks API response (first 500 chars): {}", &text[..text.len().min(500)]);
 
             // Try parsing as { tasks: [...], continuationToken: ... } first
             if let Ok(data) = serde_json::from_str::<TasksResponse>(&text) {
                 let fetched_count = data.tasks.len();
-                tracing::debug!(
+                log::debug!(
                     "Neo tasks: fetched {} tasks, continuation_token: {:?}",
                     fetched_count,
                     data.continuation_token
@@ -617,18 +617,18 @@ impl PulumiClient {
                 break;
             } else {
                 // Log and return error
-                tracing::error!("Failed to parse Neo tasks response. Response: {}", &text[..text.len().min(1000)]);
+                log::error!("Failed to parse Neo tasks response. Response: {}", &text[..text.len().min(1000)]);
                 return Err(ApiError::Parse("Failed to parse tasks response".to_string()));
             }
 
             // Safety limit to prevent infinite loops
             if all_tasks.len() > 10000 {
-                tracing::warn!("Neo tasks pagination safety limit reached");
+                log::warn!("Neo tasks pagination safety limit reached");
                 break;
             }
         }
 
-        tracing::info!("Neo tasks: total {} tasks fetched", all_tasks.len());
+        log::info!("Neo tasks: total {} tasks fetched", all_tasks.len());
         Ok(all_tasks)
     }
 
@@ -648,11 +648,11 @@ impl PulumiClient {
         }
 
         let text = response.text().await?;
-        tracing::debug!("Neo task metadata response: {}", &text[..text.len().min(500)]);
+        log::debug!("Neo task metadata response: {}", &text[..text.len().min(500)]);
 
         serde_json::from_str::<NeoTask>(&text)
             .map_err(|e| {
-                tracing::error!("Failed to parse Neo task metadata: {}. Response: {}", e, &text[..text.len().min(1000)]);
+                log::error!("Failed to parse Neo task metadata: {}. Response: {}", e, &text[..text.len().min(1000)]);
                 ApiError::Parse(format!("Failed to parse task metadata: {}", e))
             })
     }
