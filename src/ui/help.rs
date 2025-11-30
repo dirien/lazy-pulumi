@@ -55,7 +55,7 @@ pub fn render_help(frame: &mut Frame, theme: &Theme) {
             ],
         ),
         (
-            "ESC View",
+            "Environment View",
             vec![
                 ("Enter", "Load environment definition"),
                 ("o", "Open & resolve environment values"),
