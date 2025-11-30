@@ -1,11 +1,10 @@
 //! Main Pulumi API client
 
 use super::types::{
-    ApiConfig, EscEnvironmentDetails, EscEnvironmentsResponse, EscEnvironmentSummary,
-    EscOpenResponse, NeoCreateTaskResponse, NeoMessage, NeoMessageType, NeoTask, NeoTaskResponse,
-    NeoToolCall, RegistryPackage, RegistryPackagesResponse, RegistryTemplate,
-    RegistryTemplatesResponse, Resource, ResourceSearchResult, Service, ServicesResponse, Stack,
-    StacksResponse, StackUpdate, User,
+    ApiConfig, EscEnvironmentDetails, EscEnvironmentSummary, EscOpenResponse,
+    NeoCreateTaskResponse, NeoMessage, NeoMessageType, NeoTask, NeoTaskResponse, NeoToolCall,
+    RegistryPackage, RegistryPackagesResponse, RegistryTemplate, RegistryTemplatesResponse,
+    Resource, Service, ServicesResponse, Stack, StacksResponse, StackUpdate, User,
 };
 use color_eyre::Result;
 use reqwest::{header, Client};

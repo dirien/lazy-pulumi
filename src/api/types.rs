@@ -115,6 +115,7 @@ impl EscEnvironment {
 }
 
 /// ESC Environment list response
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EscEnvironmentsResponse {
@@ -320,6 +321,7 @@ pub struct NeoTasksResponse {
 }
 
 /// Resource search result
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResourceSearchResult {

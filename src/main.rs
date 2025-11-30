@@ -9,6 +9,7 @@ mod components;
 mod config;
 mod event;
 mod logging;
+mod startup;
 mod theme;
 mod tui;
 mod ui;
