@@ -14,8 +14,6 @@ tui-scrollview = "0.5"
 
 # Async Runtime
 tokio = { version = "1", features = ["full"] }
-tokio-util = "0.7"
-futures = "0.3"
 
 # HTTP Client for Pulumi API
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
@@ -31,8 +29,6 @@ thiserror = "2"
 # Utilities
 chrono = { version = "0.4", features = ["serde"] }
 directories = "5"
-unicode-width = "0.2"
-textwrap = "0.16"
 urlencoding = "2"
 
 # Logging (optional, for debugging)

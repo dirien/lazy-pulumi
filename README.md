@@ -131,10 +131,17 @@ Logs are written to a file to avoid interfering with the TUI:
 
 ## Architecture
 
+The application follows **The Elm Architecture (TEA)** pattern for clear separation of concerns.
+
 ```
 src/
 ├── main.rs          # Entry point
-├── app.rs           # Application state & main loop
+├── app/             # Application core (TEA pattern)
+│   ├── mod.rs       # App struct, new(), run(), render()
+│   ├── types.rs     # Model: Tab, FocusMode, AppState, async result types
+│   ├── handlers.rs  # Update: All keyboard event handlers
+│   ├── data.rs      # Data loading & refresh logic
+│   └── neo.rs       # Neo AI agent async operations
 ├── event.rs         # Event handling (keyboard, mouse)
 ├── tui.rs           # Terminal setup/teardown
 ├── theme.rs         # Official Pulumi brand colors & styling
