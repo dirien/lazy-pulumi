@@ -4,8 +4,8 @@
 //! including enums for tabs, focus modes, and the main application state struct.
 
 use crate::api::{
-    EscEnvironmentSummary, NeoMessage, NeoTask, RegistryPackage, RegistryTemplate, Resource,
-    Service, Stack,
+    EscEnvironmentSummary, NeoMessage, NeoTask, OrgStackUpdate, RegistryPackage, RegistryTemplate,
+    Resource, ResourceSummaryPoint, Service, Stack,
 };
 
 /// Async data loading result
@@ -18,6 +18,10 @@ pub enum DataLoadResult {
     Services(Vec<Service>),
     RegistryPackages(Vec<RegistryPackage>),
     RegistryTemplates(Vec<RegistryTemplate>),
+    /// Recent stack updates across the organization
+    RecentUpdates(Vec<OrgStackUpdate>),
+    /// Resource count over time (for dashboard chart)
+    ResourceSummary(Vec<ResourceSummaryPoint>),
     /// README content loaded for a package (key, content)
     ReadmeContent { package_key: String, content: String },
     Error(String),
@@ -173,6 +177,10 @@ pub struct AppState {
     pub esc_environments: Vec<EscEnvironmentSummary>,
     pub neo_tasks: Vec<NeoTask>,
     pub resources: Vec<Resource>,
+    /// Recent stack updates across the organization (for dashboard)
+    pub recent_updates: Vec<OrgStackUpdate>,
+    /// Resource count over time (for dashboard chart)
+    pub resource_summary: Vec<ResourceSummaryPoint>,
 
     // Selected stack details
     pub selected_stack_updates: Vec<(i32, String, String)>,
@@ -202,6 +210,8 @@ impl Default for AppState {
             esc_environments: Vec::new(),
             neo_tasks: Vec::new(),
             resources: Vec::new(),
+            recent_updates: Vec::new(),
+            resource_summary: Vec::new(),
             selected_stack_updates: Vec::new(),
             selected_env_yaml: None,
             selected_env_values: None,

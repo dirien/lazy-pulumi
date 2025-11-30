@@ -93,6 +93,75 @@ pub struct ResourceChanges {
     pub same: Option<i32>,
 }
 
+/// Organization-level stack update (includes stack info)
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct OrgStackUpdate {
+    pub org_name: String,
+    pub project_name: String,
+    pub stack_name: String,
+    pub kind: String,
+    pub result: String,
+    pub start_time: i64,
+    pub end_time: Option<i64>,
+    pub version: i32,
+    pub resource_changes: Option<ResourceChanges>,
+    /// Username who performed the update
+    pub requested_by: Option<String>,
+}
+
+#[allow(dead_code)]
+impl OrgStackUpdate {
+    pub fn stack_display(&self) -> String {
+        format!("{}/{}", self.project_name, self.stack_name)
+    }
+
+    pub fn start_time_formatted(&self) -> String {
+        if let Some(dt) = DateTime::from_timestamp(self.start_time, 0) {
+            dt.format("%Y-%m-%d %H:%M").to_string()
+        } else {
+            "Unknown".to_string()
+        }
+    }
+
+    pub fn result_symbol(&self) -> &str {
+        match self.result.as_str() {
+            "succeeded" => "✓",
+            "failed" => "✗",
+            "in-progress" => "⟳",
+            _ => "?",
+        }
+    }
+
+    pub fn changes_summary(&self) -> String {
+        if let Some(ref changes) = self.resource_changes {
+            let mut parts = Vec::new();
+            if let Some(c) = changes.create {
+                if c > 0 {
+                    parts.push(format!("+{}", c));
+                }
+            }
+            if let Some(u) = changes.update {
+                if u > 0 {
+                    parts.push(format!("~{}", u));
+                }
+            }
+            if let Some(d) = changes.delete {
+                if d > 0 {
+                    parts.push(format!("-{}", d));
+                }
+            }
+            if parts.is_empty() {
+                "no changes".to_string()
+            } else {
+                parts.join(" ")
+            }
+        } else {
+            String::new()
+        }
+    }
+}
+
 /// ESC Environment summary
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -556,4 +625,49 @@ pub struct RegistryTemplatesResponse {
     pub templates: Vec<RegistryTemplate>,
     #[serde(default)]
     pub continuation_token: Option<String>,
+}
+
+// ─────────────────────────────────────────────────────────────
+// Resource Summary Types (for resource count over time chart)
+// ─────────────────────────────────────────────────────────────
+
+/// Daily resource count data point
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceSummaryPoint {
+    pub year: i32,
+    pub month: i32,
+    pub day: i32,
+    pub resources: i64,
+    #[serde(default)]
+    pub resource_hours: Option<i64>,
+}
+
+impl ResourceSummaryPoint {
+    /// Get the date as a formatted string (e.g., "Nov 30")
+    #[allow(dead_code)]
+    pub fn date_label(&self) -> String {
+        let month_name = match self.month {
+            1 => "Jan",
+            2 => "Feb",
+            3 => "Mar",
+            4 => "Apr",
+            5 => "May",
+            6 => "Jun",
+            7 => "Jul",
+            8 => "Aug",
+            9 => "Sep",
+            10 => "Oct",
+            11 => "Nov",
+            12 => "Dec",
+            _ => "???",
+        };
+        format!("{} {}", month_name, self.day)
+    }
+}
+
+/// Resource summary API response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceSummaryResponse {
+    pub summary: Vec<ResourceSummaryPoint>,
 }

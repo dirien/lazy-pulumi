@@ -88,7 +88,7 @@ impl App {
             let tx = self.data_result_tx.clone();
 
             // Track how many loads we're starting
-            self.pending_data_loads = 7;
+            self.pending_data_loads = 9;
             self.is_loading = true;
             self.spinner.set_message("Loading data...");
 
@@ -190,8 +190,8 @@ impl App {
             });
 
             let client7 = client.clone();
-            let org7 = org;
-            let tx7 = tx;
+            let org7 = org.clone();
+            let tx7 = tx.clone();
             tokio::spawn(async move {
                 match client7.list_registry_templates(org7.as_deref()).await {
                     Ok(templates) => {
@@ -200,6 +200,40 @@ impl App {
                     Err(e) => {
                         let _ = tx7
                             .send(DataLoadResult::Error(format!("Templates: {}", e)))
+                            .await;
+                    }
+                }
+            });
+
+            // Load recent stack updates (for dashboard)
+            let client8 = client.clone();
+            let org8 = org.clone();
+            let tx8 = tx.clone();
+            tokio::spawn(async move {
+                match client8.get_org_recent_updates(org8.as_deref(), 15).await {
+                    Ok(updates) => {
+                        let _ = tx8.send(DataLoadResult::RecentUpdates(updates)).await;
+                    }
+                    Err(e) => {
+                        let _ = tx8
+                            .send(DataLoadResult::Error(format!("Recent updates: {}", e)))
+                            .await;
+                    }
+                }
+            });
+
+            // Load resource summary for dashboard chart (last 30 days)
+            let client9 = client.clone();
+            let org9 = org;
+            let tx9 = tx;
+            tokio::spawn(async move {
+                match client9.get_resource_summary(org9.as_deref(), "daily", 30).await {
+                    Ok(summary) => {
+                        let _ = tx9.send(DataLoadResult::ResourceSummary(summary)).await;
+                    }
+                    Err(e) => {
+                        let _ = tx9
+                            .send(DataLoadResult::Error(format!("Resource summary: {}", e)))
                             .await;
                     }
                 }
@@ -240,6 +274,12 @@ impl App {
                 DataLoadResult::RegistryTemplates(templates) => {
                     self.state.registry_templates = templates.clone();
                     self.templates_list.set_items(templates);
+                }
+                DataLoadResult::RecentUpdates(updates) => {
+                    self.state.recent_updates = updates;
+                }
+                DataLoadResult::ResourceSummary(summary) => {
+                    self.state.resource_summary = summary;
                 }
                 DataLoadResult::ReadmeContent {
                     package_key,
