@@ -14,7 +14,8 @@ use tokio::sync::mpsc;
 use tui_scrollview::ScrollViewState;
 
 use crate::api::{
-    EscEnvironmentSummary, NeoMessage, NeoMessageType, NeoTask, PulumiClient, Resource, Stack,
+    EscEnvironmentSummary, NeoMessage, NeoMessageType, NeoTask, PulumiClient, RegistryPackage,
+    RegistryTemplate, Resource, Service, Stack,
 };
 use crate::components::{Spinner, StatefulList, TextInput};
 use crate::event::{keys, Event, EventHandler};
@@ -22,6 +23,21 @@ use crate::logging;
 use crate::theme::Theme;
 use crate::tui::{self, Tui};
 use crate::ui;
+
+/// Async data loading result
+#[derive(Debug)]
+pub enum DataLoadResult {
+    Stacks(Vec<Stack>),
+    EscEnvironments(Vec<EscEnvironmentSummary>),
+    NeoTasks(Vec<NeoTask>),
+    Resources(Vec<Resource>),
+    Services(Vec<Service>),
+    RegistryPackages(Vec<RegistryPackage>),
+    RegistryTemplates(Vec<RegistryTemplate>),
+    /// README content loaded for a package (key, content)
+    ReadmeContent { package_key: String, content: String },
+    Error(String),
+}
 
 /// NEO async operation result
 #[derive(Debug)]
@@ -45,11 +61,12 @@ pub enum Tab {
     Stacks,
     Esc,
     Neo,
+    Platform,
 }
 
 impl Tab {
     pub fn all() -> &'static [Tab] {
-        &[Tab::Dashboard, Tab::Stacks, Tab::Esc, Tab::Neo]
+        &[Tab::Dashboard, Tab::Stacks, Tab::Esc, Tab::Neo, Tab::Platform]
     }
 
     pub fn title(&self) -> &'static str {
@@ -58,6 +75,7 @@ impl Tab {
             Tab::Stacks => " Stacks ",
             Tab::Esc => " Environment ",
             Tab::Neo => " NEO ",
+            Tab::Platform => " Platform ",
         }
     }
 
@@ -67,6 +85,7 @@ impl Tab {
             Tab::Stacks => 1,
             Tab::Esc => 2,
             Tab::Neo => 3,
+            Tab::Platform => 4,
         }
     }
 
@@ -76,6 +95,7 @@ impl Tab {
             1 => Tab::Stacks,
             2 => Tab::Esc,
             3 => Tab::Neo,
+            4 => Tab::Platform,
             _ => Tab::Dashboard,
         }
     }
@@ -97,6 +117,54 @@ pub enum FocusMode {
     Input,
 }
 
+/// Platform sub-view selection
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlatformView {
+    Services,
+    Components,
+    Templates,
+}
+
+impl PlatformView {
+    pub fn all() -> &'static [PlatformView] {
+        &[PlatformView::Services, PlatformView::Components, PlatformView::Templates]
+    }
+
+    pub fn title(&self) -> &'static str {
+        match self {
+            PlatformView::Services => "Services",
+            PlatformView::Components => "Components",
+            PlatformView::Templates => "Templates",
+        }
+    }
+
+    pub fn index(&self) -> usize {
+        match self {
+            PlatformView::Services => 0,
+            PlatformView::Components => 1,
+            PlatformView::Templates => 2,
+        }
+    }
+
+    pub fn from_index(index: usize) -> Self {
+        match index {
+            0 => PlatformView::Services,
+            1 => PlatformView::Components,
+            2 => PlatformView::Templates,
+            _ => PlatformView::Services,
+        }
+    }
+
+    pub fn next(&self) -> Self {
+        PlatformView::from_index((self.index() + 1) % PlatformView::all().len())
+    }
+
+    pub fn previous(&self) -> Self {
+        let len = PlatformView::all().len();
+        PlatformView::from_index((self.index() + len - 1) % len)
+    }
+}
+
 /// Application state
 pub struct AppState {
     // Data
@@ -116,6 +184,11 @@ pub struct AppState {
     pub neo_messages: Vec<NeoMessage>,
     pub current_task_id: Option<String>,
 
+    // Platform data
+    pub services: Vec<Service>,
+    pub registry_packages: Vec<RegistryPackage>,
+    pub registry_templates: Vec<RegistryTemplate>,
+
     // Organization
     pub organization: Option<String>,
     pub organizations: Vec<String>,
@@ -133,6 +206,9 @@ impl Default for AppState {
             selected_env_values: None,
             neo_messages: Vec::new(),
             current_task_id: None,
+            services: Vec::new(),
+            registry_packages: Vec::new(),
+            registry_templates: Vec::new(),
             organization: None,
             organizations: Vec::new(),
         }
@@ -201,6 +277,14 @@ pub struct App {
     neo_tasks_list: StatefulList<NeoTask>,
     neo_input: TextInput,
 
+    // Platform UI state
+    platform_view: PlatformView,
+    services_list: StatefulList<Service>,
+    packages_list: StatefulList<RegistryPackage>,
+    templates_list: StatefulList<RegistryTemplate>,
+    /// Scroll state for Component/Template description panel
+    platform_desc_scroll_state: ScrollViewState,
+
     /// NEO polling state - tracks if we're waiting for agent response
     neo_polling: bool,
     /// Counter for polling interval (poll every N ticks)
@@ -224,6 +308,13 @@ pub struct App {
     neo_result_rx: mpsc::Receiver<NeoAsyncResult>,
     /// Channel sender for NEO async tasks (wrapped in Arc for cloning)
     neo_result_tx: mpsc::Sender<NeoAsyncResult>,
+
+    /// Channel for receiving async data loading results
+    data_result_rx: mpsc::Receiver<DataLoadResult>,
+    /// Channel sender for async data loading
+    data_result_tx: mpsc::Sender<DataLoadResult>,
+    /// Number of pending data load operations
+    pending_data_loads: u8,
 }
 
 impl App {
@@ -279,6 +370,9 @@ impl App {
         // Create channel for async NEO results
         let (neo_result_tx, neo_result_rx) = mpsc::channel::<NeoAsyncResult>(32);
 
+        // Create channel for async data loading results
+        let (data_result_tx, data_result_rx) = mpsc::channel::<DataLoadResult>(32);
+
         let mut app = Self {
             terminal,
             events,
@@ -302,6 +396,11 @@ impl App {
             esc_list: StatefulList::new(),
             neo_tasks_list: StatefulList::new(),
             neo_input: TextInput::new(),
+            platform_view: PlatformView::Services,
+            services_list: StatefulList::new(),
+            packages_list: StatefulList::new(),
+            templates_list: StatefulList::new(),
+            platform_desc_scroll_state: ScrollViewState::default(),
             neo_polling: false,
             neo_poll_counter: 0,
             neo_stable_polls: 0,
@@ -313,6 +412,9 @@ impl App {
             neo_auto_scroll: Arc::new(AtomicBool::new(true)),
             neo_result_rx,
             neo_result_tx,
+            data_result_rx,
+            data_result_tx,
+            pending_data_loads: 0,
         };
 
         // Initial data load
@@ -350,41 +452,147 @@ impl App {
                 }
             }
 
-            // Load data for current org
-            self.refresh_data().await;
-
-            self.is_loading = false;
+            // Load data for current org (non-blocking)
+            self.refresh_data();
+            // Note: is_loading will be cleared when all spawned tasks complete
         } else {
             self.error = Some("No API client - set PULUMI_ACCESS_TOKEN".to_string());
         }
     }
 
-    /// Refresh all data
-    async fn refresh_data(&mut self) {
+    /// Refresh all data - spawns parallel async tasks for non-blocking loads
+    fn refresh_data(&mut self) {
         if let Some(ref client) = self.client {
-            let org = self.state.organization.as_deref();
+            let org = self.state.organization.clone();
+            let tx = self.data_result_tx.clone();
 
-            // Load stacks
-            if let Ok(stacks) = client.list_stacks(org).await {
-                self.state.stacks = stacks.clone();
-                self.stacks_list.set_items(stacks);
+            // Track how many loads we're starting
+            self.pending_data_loads = 7;
+            self.is_loading = true;
+            self.spinner.set_message("Loading data...");
+
+            // Spawn all data loads in parallel
+            let client1 = client.clone();
+            let org1 = org.clone();
+            let tx1 = tx.clone();
+            tokio::spawn(async move {
+                match client1.list_stacks(org1.as_deref()).await {
+                    Ok(stacks) => { let _ = tx1.send(DataLoadResult::Stacks(stacks)).await; }
+                    Err(e) => { let _ = tx1.send(DataLoadResult::Error(format!("Stacks: {}", e))).await; }
+                }
+            });
+
+            let client2 = client.clone();
+            let org2 = org.clone();
+            let tx2 = tx.clone();
+            tokio::spawn(async move {
+                match client2.list_esc_environments(org2.as_deref()).await {
+                    Ok(envs) => { let _ = tx2.send(DataLoadResult::EscEnvironments(envs)).await; }
+                    Err(e) => { let _ = tx2.send(DataLoadResult::Error(format!("ESC: {}", e))).await; }
+                }
+            });
+
+            let client3 = client.clone();
+            let org3 = org.clone();
+            let tx3 = tx.clone();
+            tokio::spawn(async move {
+                match client3.list_neo_tasks(org3.as_deref()).await {
+                    Ok(tasks) => { let _ = tx3.send(DataLoadResult::NeoTasks(tasks)).await; }
+                    Err(e) => { let _ = tx3.send(DataLoadResult::Error(format!("NEO: {}", e))).await; }
+                }
+            });
+
+            let client4 = client.clone();
+            let org4 = org.clone();
+            let tx4 = tx.clone();
+            tokio::spawn(async move {
+                match client4.search_resources(org4.as_deref(), "").await {
+                    Ok(resources) => { let _ = tx4.send(DataLoadResult::Resources(resources)).await; }
+                    Err(e) => { let _ = tx4.send(DataLoadResult::Error(format!("Resources: {}", e))).await; }
+                }
+            });
+
+            let client5 = client.clone();
+            let org5 = org.clone();
+            let tx5 = tx.clone();
+            tokio::spawn(async move {
+                match client5.list_services(org5.as_deref()).await {
+                    Ok(services) => { let _ = tx5.send(DataLoadResult::Services(services)).await; }
+                    Err(e) => { let _ = tx5.send(DataLoadResult::Error(format!("Services: {}", e))).await; }
+                }
+            });
+
+            let client6 = client.clone();
+            let org6 = org.clone();
+            let tx6 = tx.clone();
+            tokio::spawn(async move {
+                match client6.list_registry_packages(org6.as_deref()).await {
+                    Ok(packages) => { let _ = tx6.send(DataLoadResult::RegistryPackages(packages)).await; }
+                    Err(e) => { let _ = tx6.send(DataLoadResult::Error(format!("Packages: {}", e))).await; }
+                }
+            });
+
+            let client7 = client.clone();
+            let org7 = org;
+            let tx7 = tx;
+            tokio::spawn(async move {
+                match client7.list_registry_templates(org7.as_deref()).await {
+                    Ok(templates) => { let _ = tx7.send(DataLoadResult::RegistryTemplates(templates)).await; }
+                    Err(e) => { let _ = tx7.send(DataLoadResult::Error(format!("Templates: {}", e))).await; }
+                }
+            });
+        }
+    }
+
+    /// Process async data loading results (non-blocking)
+    fn process_data_results(&mut self) {
+        while let Ok(result) = self.data_result_rx.try_recv() {
+            self.pending_data_loads = self.pending_data_loads.saturating_sub(1);
+
+            match result {
+                DataLoadResult::Stacks(stacks) => {
+                    self.state.stacks = stacks.clone();
+                    self.stacks_list.set_items(stacks);
+                }
+                DataLoadResult::EscEnvironments(envs) => {
+                    self.state.esc_environments = envs.clone();
+                    self.esc_list.set_items(envs);
+                }
+                DataLoadResult::NeoTasks(tasks) => {
+                    self.state.neo_tasks = tasks.clone();
+                    self.neo_tasks_list.set_items(tasks);
+                }
+                DataLoadResult::Resources(resources) => {
+                    self.state.resources = resources;
+                }
+                DataLoadResult::Services(services) => {
+                    self.state.services = services.clone();
+                    self.services_list.set_items(services);
+                }
+                DataLoadResult::RegistryPackages(packages) => {
+                    self.state.registry_packages = packages.clone();
+                    self.packages_list.set_items(packages);
+                }
+                DataLoadResult::RegistryTemplates(templates) => {
+                    self.state.registry_templates = templates.clone();
+                    self.templates_list.set_items(templates);
+                }
+                DataLoadResult::ReadmeContent { package_key, content } => {
+                    // Find the package and update its readme_content
+                    if let Some(pkg) = self.packages_list.items_mut().iter_mut()
+                        .find(|p| p.key() == package_key)
+                    {
+                        pkg.readme_content = Some(content);
+                    }
+                }
+                DataLoadResult::Error(e) => {
+                    tracing::warn!("Data load error: {}", e);
+                }
             }
 
-            // Load ESC environments
-            if let Ok(envs) = client.list_esc_environments(org).await {
-                self.state.esc_environments = envs.clone();
-                self.esc_list.set_items(envs);
-            }
-
-            // Load NEO tasks
-            if let Ok(tasks) = client.list_neo_tasks(org).await {
-                self.state.neo_tasks = tasks.clone();
-                self.neo_tasks_list.set_items(tasks);
-            }
-
-            // Load resources (sample search)
-            if let Ok(resources) = client.search_resources(org, "").await {
-                self.state.resources = resources;
+            // Clear loading state when all loads complete
+            if self.pending_data_loads == 0 {
+                self.is_loading = false;
             }
         }
     }
@@ -394,6 +602,9 @@ impl App {
         while !self.should_quit {
             // Render
             self.render()?;
+
+            // Check for async data loading results (non-blocking)
+            self.process_data_results();
 
             // Check for async NEO results (non-blocking)
             self.process_neo_results();
@@ -636,6 +847,13 @@ impl App {
         let neo_scroll_state = &mut self.neo_scroll_state;
         let neo_auto_scroll = self.neo_auto_scroll.clone();
 
+        // Platform state
+        let platform_view = self.platform_view;
+        let services_list = &mut self.services_list;
+        let packages_list = &mut self.packages_list;
+        let templates_list = &mut self.templates_list;
+        let platform_desc_scroll_state = &mut self.platform_desc_scroll_state;
+
         self.terminal.draw(|frame| {
             let (header_area, content_area, footer_area) = ui::main_layout(frame.area());
 
@@ -678,6 +896,18 @@ impl App {
                         &neo_auto_scroll,
                         neo_is_thinking,
                         spinner_char,
+                    );
+                }
+                Tab::Platform => {
+                    ui::render_platform_view(
+                        frame,
+                        theme,
+                        content_area,
+                        platform_view,
+                        services_list,
+                        packages_list,
+                        templates_list,
+                        platform_desc_scroll_state,
                     );
                 }
             }
@@ -739,6 +969,7 @@ impl App {
                 Tab::Stacks => "↑↓: navigate | o: org | l: logs | Enter: details | r: refresh | q: quit".to_string(),
                 Tab::Esc => "↑↓: navigate | o: org | l: logs | Enter: load | O: resolve | q: quit".to_string(),
                 Tab::Neo => "↑↓: tasks | j/k: scroll | o: org | l: logs | n: new | i: type | q: quit".to_string(),
+                Tab::Platform => "↑↓: navigate | ←→: switch view | o: org | l: logs | r: refresh | q: quit".to_string(),
             },
         }
     }
@@ -826,9 +1057,9 @@ impl App {
                     self.neo_scroll_state = ScrollViewState::default();
                     self.neo_auto_scroll.store(true, Ordering::Relaxed);
 
-                    // Refresh all data for the new organization
-                    self.refresh_data().await;
-                    self.is_loading = false;
+                    // Refresh all data for the new organization (non-blocking)
+                    self.refresh_data();
+                    // Note: is_loading will be cleared when all spawned tasks complete
                 }
             }
             return;
@@ -891,10 +1122,8 @@ impl App {
         }
 
         if keys::is_char(&key, 'r') {
-            self.is_loading = true;
-            self.spinner.set_message("Refreshing...");
-            self.refresh_data().await;
-            self.is_loading = false;
+            // refresh_data sets is_loading and spawns async tasks
+            self.refresh_data();
             return;
         }
 
@@ -911,6 +1140,9 @@ impl App {
             }
             Tab::Neo => {
                 self.handle_neo_key(key).await;
+            }
+            Tab::Platform => {
+                self.handle_platform_key(key).await;
             }
         }
     }
@@ -1155,6 +1387,169 @@ impl App {
                 self.neo_scroll_state.scroll_to_bottom();
                 self.neo_auto_scroll.store(true, Ordering::Relaxed);
             }
+        }
+    }
+
+    /// Load README for the currently selected package (if not already loaded)
+    fn spawn_readme_load_for_selected_package(&self) {
+        let Some(client) = &self.client else {
+            return;
+        };
+        if let Some(pkg) = self.packages_list.selected() {
+            // Only load if README URL exists and content hasn't been loaded yet
+            if pkg.readme_content.is_some() {
+                return;
+            }
+            if let Some(readme_url) = &pkg.readme_url {
+                let client = client.clone();
+                let tx = self.data_result_tx.clone();
+                let package_key = pkg.key();
+                let url = readme_url.clone();
+
+                tokio::spawn(async move {
+                    match client.fetch_readme(&url).await {
+                        Ok(content) => {
+                            let _ = tx.send(DataLoadResult::ReadmeContent {
+                                package_key,
+                                content,
+                            }).await;
+                        }
+                        Err(e) => {
+                            tracing::debug!("Failed to load README: {}", e);
+                        }
+                    }
+                });
+            }
+        }
+    }
+
+    /// Handle Platform view keys
+    async fn handle_platform_key(&mut self, key: KeyEvent) {
+        use crossterm::event::KeyCode;
+
+        // For Components/Templates views: j/k scroll description, arrow keys navigate list
+        // For Services view: both j/k and arrow keys navigate list
+        match key.code {
+            // j/k keys - scroll description in Components/Templates, navigate list in Services
+            KeyCode::Char('j') => match self.platform_view {
+                PlatformView::Services => self.services_list.next(),
+                PlatformView::Components | PlatformView::Templates => {
+                    self.platform_desc_scroll_state.scroll_down();
+                }
+            },
+            KeyCode::Char('k') => match self.platform_view {
+                PlatformView::Services => self.services_list.previous(),
+                PlatformView::Components | PlatformView::Templates => {
+                    self.platform_desc_scroll_state.scroll_up();
+                }
+            },
+            // J/K for page scroll in description
+            KeyCode::Char('J') => match self.platform_view {
+                PlatformView::Services => {}
+                PlatformView::Components | PlatformView::Templates => {
+                    self.platform_desc_scroll_state.scroll_page_down();
+                }
+            },
+            KeyCode::Char('K') => match self.platform_view {
+                PlatformView::Services => {}
+                PlatformView::Components | PlatformView::Templates => {
+                    self.platform_desc_scroll_state.scroll_page_up();
+                }
+            },
+            // Arrow keys - always navigate the list
+            KeyCode::Up => match self.platform_view {
+                PlatformView::Services => self.services_list.previous(),
+                PlatformView::Components => {
+                    self.packages_list.previous();
+                    self.platform_desc_scroll_state = ScrollViewState::default();
+                    self.spawn_readme_load_for_selected_package();
+                }
+                PlatformView::Templates => {
+                    self.templates_list.previous();
+                    self.platform_desc_scroll_state = ScrollViewState::default();
+                }
+            },
+            KeyCode::Down => match self.platform_view {
+                PlatformView::Services => self.services_list.next(),
+                PlatformView::Components => {
+                    self.packages_list.next();
+                    self.platform_desc_scroll_state = ScrollViewState::default();
+                    self.spawn_readme_load_for_selected_package();
+                }
+                PlatformView::Templates => {
+                    self.templates_list.next();
+                    self.platform_desc_scroll_state = ScrollViewState::default();
+                }
+            },
+            // Left/Right and h/l - switch between views
+            KeyCode::Left | KeyCode::Char('h') => {
+                self.platform_view = self.platform_view.previous();
+                self.platform_desc_scroll_state = ScrollViewState::default();
+                if self.platform_view == PlatformView::Components {
+                    self.spawn_readme_load_for_selected_package();
+                }
+            }
+            KeyCode::Right | KeyCode::Char('l') => {
+                self.platform_view = self.platform_view.next();
+                self.platform_desc_scroll_state = ScrollViewState::default();
+                if self.platform_view == PlatformView::Components {
+                    self.spawn_readme_load_for_selected_package();
+                }
+            }
+            // PageUp/PageDown - page scroll description
+            KeyCode::PageUp => match self.platform_view {
+                PlatformView::Services => {}
+                PlatformView::Components | PlatformView::Templates => {
+                    self.platform_desc_scroll_state.scroll_page_up();
+                }
+            },
+            KeyCode::PageDown => match self.platform_view {
+                PlatformView::Services => {}
+                PlatformView::Components | PlatformView::Templates => {
+                    self.platform_desc_scroll_state.scroll_page_down();
+                }
+            },
+            // Home/g - go to first item
+            KeyCode::Home | KeyCode::Char('g') => match self.platform_view {
+                PlatformView::Services => self.services_list.select_first(),
+                PlatformView::Components => {
+                    self.packages_list.select_first();
+                    self.platform_desc_scroll_state = ScrollViewState::default();
+                    self.spawn_readme_load_for_selected_package();
+                }
+                PlatformView::Templates => {
+                    self.templates_list.select_first();
+                    self.platform_desc_scroll_state = ScrollViewState::default();
+                }
+            },
+            // End/G - go to last item
+            KeyCode::End | KeyCode::Char('G') => match self.platform_view {
+                PlatformView::Services => self.services_list.select_last(),
+                PlatformView::Components => {
+                    self.packages_list.select_last();
+                    self.platform_desc_scroll_state = ScrollViewState::default();
+                    self.spawn_readme_load_for_selected_package();
+                }
+                PlatformView::Templates => {
+                    self.templates_list.select_last();
+                    self.platform_desc_scroll_state = ScrollViewState::default();
+                }
+            },
+            // Number keys - jump to specific view
+            KeyCode::Char('1') => {
+                self.platform_view = PlatformView::Services;
+                self.platform_desc_scroll_state = ScrollViewState::default();
+            }
+            KeyCode::Char('2') => {
+                self.platform_view = PlatformView::Components;
+                self.platform_desc_scroll_state = ScrollViewState::default();
+                self.spawn_readme_load_for_selected_package();
+            }
+            KeyCode::Char('3') => {
+                self.platform_view = PlatformView::Templates;
+                self.platform_desc_scroll_state = ScrollViewState::default();
+            }
+            _ => {}
         }
     }
 }
