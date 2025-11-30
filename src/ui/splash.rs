@@ -1,6 +1,7 @@
 //! Splash screen rendering
 //!
-//! Displays pixel art version of the Pulumi mascot with "Lazy Pulumi" title.
+//! Displays the Pulumi logo with "Lazy Pulumi" title.
+//! The logo scales to fit the terminal while maintaining aspect ratio.
 
 use image::{DynamicImage, GenericImageView, Rgba};
 use ratatui::{
@@ -17,48 +18,32 @@ use crate::theme::Theme;
 /// Application version from Cargo.toml
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Cached pixel art data
-static PIXEL_ART_CACHE: OnceLock<PixelArtData> = OnceLock::new();
+/// Cached original image
+static IMAGE_CACHE: OnceLock<DynamicImage> = OnceLock::new();
 
-/// Pixel art data structure
-struct PixelArtData {
-    /// Full size pixel art (for larger terminals)
-    full: Vec<Vec<Option<Color>>>,
-    /// Small size pixel art (for smaller terminals)
-    small: Vec<Vec<Option<Color>>>,
+/// Load the original image (cached)
+fn get_image() -> &'static DynamicImage {
+    IMAGE_CACHE.get_or_init(|| {
+        let image_bytes = include_bytes!("../../assets/logo-on-black.png");
+        image::load_from_memory(image_bytes).expect("Failed to load embedded Pulumi logo")
+    })
 }
 
-/// Load and convert image to pixel art
-fn load_pixel_art() -> PixelArtData {
-    // Embed the image at compile time
-    let image_bytes = include_bytes!("../../assets/mascot.png");
-
-    let img = image::load_from_memory(image_bytes)
-        .expect("Failed to load embedded mascot image");
-
-    // Create full size version with higher resolution for better quality
-    // Using ~80 chars wide for good detail on modern terminals
-    let full = image_to_pixels(&img, 80, 40);
-
-    // Create small version for smaller terminals
-    let small = image_to_pixels(&img, 40, 20);
-
-    PixelArtData { full, small }
-}
-
-/// Convert image to pixel color grid
+/// Convert image to pixel color grid at specified dimensions
 fn image_to_pixels(img: &DynamicImage, target_width: u32, target_height: u32) -> Vec<Vec<Option<Color>>> {
+    // Use resize_exact to get exact dimensions we want
     let resized = img.resize_exact(
         target_width,
         target_height,
         image::imageops::FilterType::Lanczos3,
     );
 
-    let mut pixels = Vec::with_capacity(target_height as usize);
+    let (actual_width, actual_height) = resized.dimensions();
+    let mut pixels = Vec::with_capacity(actual_height as usize);
 
-    for y in 0..target_height {
-        let mut row = Vec::with_capacity(target_width as usize);
-        for x in 0..target_width {
+    for y in 0..actual_height {
+        let mut row = Vec::with_capacity(actual_width as usize);
+        for x in 0..actual_width {
             let pixel = resized.get_pixel(x, y);
             let color = rgba_to_color(pixel);
             row.push(color);
@@ -69,21 +54,21 @@ fn image_to_pixels(img: &DynamicImage, target_width: u32, target_height: u32) ->
     pixels
 }
 
-/// Convert RGBA pixel to ratatui Color, returns None for transparent pixels
+/// Convert RGBA pixel to ratatui Color, returns None for transparent or black pixels
 fn rgba_to_color(pixel: Rgba<u8>) -> Option<Color> {
     let [r, g, b, a] = pixel.0;
 
-    // Skip transparent/nearly transparent pixels
+    // Skip transparent pixels
     if a < 128 {
         return None;
     }
 
-    Some(Color::Rgb(r, g, b))
-}
+    // Skip black/near-black pixels (the background)
+    if r < 20 && g < 20 && b < 20 {
+        return None;
+    }
 
-/// Get or initialize pixel art cache
-fn get_pixel_art() -> &'static PixelArtData {
-    PIXEL_ART_CACHE.get_or_init(load_pixel_art)
+    Some(Color::Rgb(r, g, b))
 }
 
 /// Render the splash screen
@@ -95,21 +80,55 @@ pub fn render_splash(
     is_loading: bool,
 ) {
     let area = frame.area();
+    let img = get_image();
 
-    let pixel_art = get_pixel_art();
-
-    // Determine if we have enough space for the full art
-    // Full art is 80x40, small is 40x20
-    let use_full_art = area.height >= 55 && area.width >= 90;
-
-    let pixels = if use_full_art { &pixel_art.full } else { &pixel_art.small };
-    let pixel_height = pixels.len() as u16;
-
+    // Reserve space for title, version, loading, checkbox, and spacing
     let title_height: u16 = 1;
     let version_height: u16 = 1;
     let checkbox_height: u16 = 3;
     let loading_height: u16 = 2;
-    let total_content_height = pixel_height + title_height + version_height + checkbox_height + loading_height + 8;
+    let spacing: u16 = 8; // Total spacing between elements
+    let reserved_height = title_height + version_height + checkbox_height + loading_height + spacing;
+
+    // Calculate available space for the logo
+    let available_height = area.height.saturating_sub(reserved_height);
+    let available_width = area.width.saturating_sub(4); // Leave some margin
+
+    // Get original image dimensions (425x106 - wide logo)
+    let (orig_width, orig_height) = img.dimensions();
+    let image_aspect = orig_width as f32 / orig_height as f32; // ~4:1
+
+    // Terminal characters are typically about 2:1 height to width ratio
+    // To maintain visual aspect ratio: visual_width / visual_height = image_aspect
+    // Since terminal chars are 2x tall: pixel_width / pixel_height = image_aspect * 2
+
+    let effective_aspect = image_aspect * 2.0;
+
+    // Calculate dimensions to fit available space
+    let max_height = available_height.min(25) as f32; // Cap height for this wide logo
+    let max_width = available_width as f32;
+
+    // Try using max height first
+    let width_for_height = max_height * effective_aspect;
+
+    let (final_width, final_height) = if width_for_height <= max_width {
+        // Height is limiting
+        (width_for_height as u32, max_height as u32)
+    } else {
+        // Width is limiting
+        let h = max_width / effective_aspect;
+        (max_width as u32, h as u32)
+    };
+
+    // Ensure minimum size
+    let final_width = final_width.max(60);
+    let final_height = final_height.max(8);
+
+    // Generate pixel art at calculated dimensions
+    let pixels = image_to_pixels(img, final_width, final_height);
+    let pixel_height = pixels.len() as u16;
+
+    let total_content_height = pixel_height + reserved_height;
 
     // Center everything vertically
     let vertical_padding = area.height.saturating_sub(total_content_height) / 2;
@@ -131,7 +150,7 @@ pub fn render_splash(
         ])
         .split(area);
 
-    // Render pixel art
+    // Render logo
     let pixel_lines: Vec<Line> = pixels
         .iter()
         .map(|row| pixels_to_line(row))
