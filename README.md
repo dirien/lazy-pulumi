@@ -1,13 +1,13 @@
 # Lazy Pulumi
 
-A stylish terminal UI for Pulumi Cloud, ESC, and NEO built with Ratatui.
+A stylish terminal UI for Pulumi Cloud, ESC, and Neo built with Ratatui.
 
 ## Features
 
 - **Dashboard**: Overview of your Pulumi resources with quick stats
 - **Stacks View**: Browse and manage your Pulumi stacks with update history
 - **ESC View**: Manage ESC environments, view definitions, and resolve secrets
-- **NEO Chat**: Interactive chat interface for Pulumi's AI agent with markdown rendering
+- **Neo Chat**: Interactive chat interface for Pulumi's AI agent with markdown rendering
 - **Platform View**: Browse Services, Components (Registry Packages), and Templates
 - **Organization Selector**: Switch between organizations on-the-fly with `o`
 - **Splash Screen**: Startup checks for token validation and CLI availability
@@ -87,7 +87,7 @@ Logs are written to a file to avoid interfering with the TUI:
 | `Enter` | Load environment definition |
 | `O` | Open & resolve environment values |
 
-### NEO View
+### Neo View
 | Key | Action |
 |-----|--------|
 | `n` | Start new task |
@@ -151,7 +151,7 @@ src/
 ├── api/             # Pulumi API client
 │   ├── mod.rs
 │   ├── client.rs    # HTTP client
-│   └── types.rs     # Data structures (Stacks, ESC, NEO, Resources, Registry)
+│   └── types.rs     # Data structures (Stacks, ESC, Neo, Resources, Registry)
 ├── components/      # Reusable UI components
 │   ├── mod.rs
 │   ├── input.rs     # Text input field
@@ -168,7 +168,7 @@ src/
     ├── help.rs      # Keyboard shortcut overlay
     ├── logs.rs      # Log viewer popup
     ├── splash.rs    # Startup splash screen with checklist
-    └── markdown.rs  # Markdown rendering for NEO messages
+    └── markdown.rs  # Markdown rendering for Neo messages
 ```
 
 ## Color Theme
@@ -188,9 +188,9 @@ Additional UI colors:
 - **Success**: Green (#48BB78) for passed states
 - **Background**: Dark theme with purple undertones
 
-## NEO Chat Features
+## Neo Chat Features
 
-The NEO view provides a rich chat interface for Pulumi's AI agent:
+The Neo view provides a rich chat interface for Pulumi's AI agent:
 
 - **Markdown Rendering**: Bold, italic, code blocks, headers, lists
 - **Auto-scroll**: Automatically scrolls to new messages
@@ -200,7 +200,7 @@ The NEO view provides a rich chat interface for Pulumi's AI agent:
   - Linked PRs with state (open/merged/closed)
   - Involved entities (stacks, environments, repositories)
   - Active policies
-- **Thinking Indicator**: Animated spinner while NEO is processing
+- **Thinking Indicator**: Animated spinner while Neo is processing
 - **Background Polling**: Updates automatically every few seconds
 
 ## Splash Screen
