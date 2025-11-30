@@ -1,9 +1,53 @@
 //! Theme and styling for the Pulumi TUI
 //!
-//! Official Pulumi brand color palette for a polished, on-brand design.
+//! Dracula theme background with Pulumi brand color accents.
+//! Dracula: https://draculatheme.com/spec
 //! Brand colors: Yellow, Salmon, Fuchsia, Purple, Violet, Blue
 
 use ratatui::style::{Color, Modifier, Style};
+
+/// Official Dracula theme colors
+/// Source: https://draculatheme.com/spec
+#[allow(dead_code)]
+pub mod dracula {
+    use ratatui::style::Color;
+
+    /// Dracula Background - #282A36 (RGB 40, 42, 54)
+    pub const BACKGROUND: Color = Color::Rgb(40, 42, 54);
+
+    /// Dracula Current Line - #44475A (RGB 68, 71, 90)
+    pub const CURRENT_LINE: Color = Color::Rgb(68, 71, 90);
+
+    /// Dracula Selection (slightly lighter than current line)
+    pub const SELECTION: Color = Color::Rgb(68, 71, 90);
+
+    /// Dracula Foreground - #F8F8F2 (RGB 248, 248, 242)
+    pub const FOREGROUND: Color = Color::Rgb(248, 248, 242);
+
+    /// Dracula Comment - #6272A4 (RGB 98, 114, 164)
+    pub const COMMENT: Color = Color::Rgb(98, 114, 164);
+
+    /// Dracula Cyan - #8BE9FD (RGB 139, 233, 253)
+    pub const CYAN: Color = Color::Rgb(139, 233, 253);
+
+    /// Dracula Green - #50FA7B (RGB 80, 250, 123)
+    pub const GREEN: Color = Color::Rgb(80, 250, 123);
+
+    /// Dracula Orange - #FFB86C (RGB 255, 184, 108)
+    pub const ORANGE: Color = Color::Rgb(255, 184, 108);
+
+    /// Dracula Pink - #FF79C6 (RGB 255, 121, 198)
+    pub const PINK: Color = Color::Rgb(255, 121, 198);
+
+    /// Dracula Purple - #BD93F9 (RGB 189, 147, 249)
+    pub const PURPLE: Color = Color::Rgb(189, 147, 249);
+
+    /// Dracula Red - #FF5555 (RGB 255, 85, 85)
+    pub const RED: Color = Color::Rgb(255, 85, 85);
+
+    /// Dracula Yellow - #F1FA8C (RGB 241, 250, 140)
+    pub const YELLOW: Color = Color::Rgb(241, 250, 140);
+}
 
 /// Official Pulumi brand colors
 pub mod brand {
@@ -87,30 +131,30 @@ pub struct Theme {
 impl Default for Theme {
     fn default() -> Self {
         Self {
-            // Official Pulumi brand colors
+            // Pulumi brand colors for accents
             primary: brand::VIOLET,               // Pulumi Violet - main accent
             secondary: brand::BLUE,               // Pulumi Blue - secondary accent
             accent: brand::YELLOW,                // Pulumi Yellow - highlights/accents
 
-            // Dark mode backgrounds (complement the brand colors)
-            bg_dark: Color::Rgb(18, 18, 24),      // Deep dark with purple undertone
-            bg_medium: Color::Rgb(28, 28, 38),    // Dark with subtle warmth
-            bg_light: Color::Rgb(42, 42, 56),     // Medium dark
+            // Dracula background colors
+            bg_dark: dracula::BACKGROUND,         // #282A36 - main background
+            bg_medium: dracula::CURRENT_LINE,     // #44475A - elevated surfaces
+            bg_light: Color::Rgb(55, 58, 77),     // Slightly lighter for selection
 
-            // Text (light text for dark backgrounds)
-            text_primary: Color::Rgb(245, 245, 252),
-            text_secondary: Color::Rgb(185, 185, 205),
-            text_muted: Color::Rgb(125, 125, 150),
+            // Dracula text colors
+            text_primary: dracula::FOREGROUND,    // #F8F8F2 - main text
+            text_secondary: Color::Rgb(200, 200, 210), // Slightly dimmed
+            text_muted: dracula::COMMENT,         // #6272A4 - comments/muted
 
-            // Status colors (blend with brand palette)
-            success: Color::Rgb(72, 187, 120),    // Green (kept for accessibility)
-            warning: brand::YELLOW,               // Pulumi Yellow
-            error: brand::SALMON,                 // Pulumi Salmon
-            info: brand::BLUE,                    // Pulumi Blue
+            // Status colors (Dracula colors for semantics, Pulumi for brand)
+            success: dracula::GREEN,              // #50FA7B - Dracula green
+            warning: brand::YELLOW,               // Pulumi Yellow (warmer than Dracula)
+            error: brand::SALMON,                 // Pulumi Salmon (softer than Dracula red)
+            info: dracula::CYAN,                  // #8BE9FD - Dracula cyan
 
-            // Special accents
+            // Special accents (Pulumi brand)
             highlight: brand::FUCHSIA,            // Pulumi Fuchsia for highlights
-            border: Color::Rgb(55, 55, 75),       // Muted border
+            border: dracula::COMMENT,             // #6272A4 - Dracula comment for borders
             border_focused: brand::VIOLET,        // Pulumi Violet for focused borders
 
             // Direct color access
