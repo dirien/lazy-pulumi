@@ -120,13 +120,15 @@ src/
 ├── components/             # Reusable UI widgets
 │   ├── list.rs             # StatefulList<T>
 │   ├── input.rs            # TextInput
+│   ├── editor.rs           # TextEditor (multi-line)
 │   └── spinner.rs          # Loading spinner
 ├── ui/                     # View layer (rendering)
 │   ├── dashboard.rs        # Dashboard view
 │   ├── stacks.rs           # Stacks view
-│   ├── esc.rs              # ESC environments view
+│   ├── esc.rs              # ESC environments view + editor
 │   ├── neo.rs              # Neo chat view
 │   ├── platform.rs         # Platform view
+│   ├── syntax.rs           # Syntax highlighting (syntect)
 │   └── ...                 # Other UI components
 ├── config.rs               # User configuration
 ├── event.rs                # Async event handler
@@ -186,6 +188,7 @@ Views in `src/ui/` render to Ratatui frames:
 
 - `StatefulList<T>` - Scrollable list with selection state
 - `TextInput` - Single-line text input with cursor
+- `TextEditor` - Multi-line text editor with cursor, scrolling, and syntax highlighting
 - `Spinner` - Animated loading indicator
 
 ### Application Flow
@@ -319,11 +322,23 @@ Note: API may return `null` for array fields. Use custom deserializer `null_to_e
 All list APIs require pagination to get accurate counts. Key details:
 
 ### ESC Environments API
-- **Endpoint**: `GET /api/esc/environments/{org}`
+- **List Endpoint**: `GET /api/esc/environments/{org}`
 - **Pagination**: Uses `continuationToken` query parameter
 - **Response fields**: `environments` array, no `organization` field in each item (implied from URL)
 - **Field names**: Uses `created` and `modified` (NOT `createdAt`/`modifiedAt`)
 - **Extra fields**: API returns additional fields like `id`, `tags`, `links`, `referrerMetadata`, `settings` - use `#[serde(default)]` to ignore
+
+### ESC Environment Details API
+- **Get Definition**: `GET /api/esc/environments/{org}/{project}/{environment}`
+  - Returns YAML content directly as plain text (not JSON)
+- **Update Definition**: `PATCH /api/esc/environments/{org}/{project}/{environment}`
+  - Request body: YAML content as plain text
+  - Content-Type: `application/x-yaml`
+  - Returns updated environment metadata on success
+- **Open Environment** (two-step process):
+  1. `POST /api/esc/environments/{org}/{project}/{environment}/open` - Returns `{"id": 1234567, "diagnostics": ""}`
+  2. `GET /api/esc/environments/{org}/{project}/{environment}/open/{sessionId}` - Returns resolved values as JSON
+- **Note**: Opening an environment may return 400 errors with diagnostics if the environment has invalid references (e.g., `values.stackRefs` referencing a non-existent stack)
 
 ### Neo Tasks API
 - **Endpoint**: `GET /api/preview/agents/{org}/tasks`
@@ -375,6 +390,48 @@ The dashboard displays:
 
 4. **Quick Info** (bottom right):
    - Keyboard shortcuts: Tab (views), ? (help), r (refresh)
+
+## ESC Environment Editor
+
+The ESC view includes a built-in YAML editor for modifying environment definitions.
+
+### Opening the Editor
+- Navigate to the ESC tab and select an environment
+- Press `e` to open the editor dialog
+- The editor loads the environment's YAML definition
+
+### Editor Features
+- **Syntax highlighting**: YAML syntax coloring using syntect
+- **Line numbers**: Displayed in the left gutter
+- **Scrolling**: Vertical scrollbar for long documents
+- **Cursor positioning**: Visual cursor with line/column tracking
+- **Modified indicator**: Title shows `[modified]` when changes are pending
+
+### Editor Key Bindings
+| Key | Action |
+|-----|--------|
+| `Esc` | Save changes and close editor |
+| `Ctrl+C` | Cancel and close without saving |
+| `↑`/`↓`/`←`/`→` | Move cursor |
+| `Home` | Move to beginning of line |
+| `End` | Move to end of line |
+| `PageUp`/`PageDown` | Scroll by page |
+| `Ctrl+Home` | Jump to top of document |
+| `Ctrl+End` | Jump to end of document |
+| `Tab` | Insert 2-space indentation |
+| `Enter` | Insert newline with auto-indent |
+| `Backspace` | Delete character before cursor |
+| `Delete` | Delete character at cursor |
+| `Ctrl+U` | Delete to beginning of line |
+| `Ctrl+K` | Delete to end of line |
+| `Ctrl+A` | Move to beginning of line |
+| `Ctrl+E` | Move to end of line |
+| `Ctrl+D` | Delete character at cursor |
+
+### Implementation Details
+- **Component**: `src/components/editor.rs` - `TextEditor` struct
+- **Rendering**: `src/ui/esc.rs` - `render_esc_editor()` function
+- **API**: `PATCH /api/esc/environments/{org}/{project}/{environment}` with YAML body
 
 ## Ratatui LLM Chat Best Practices
 

@@ -213,18 +213,31 @@ pub struct EscEnvironmentSummary {
 }
 
 /// ESC Environment details
+/// Note: The API response varies - may include yaml, definition, or other fields
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EscEnvironmentDetails {
     #[serde(default)]
     pub yaml: Option<String>,
     #[serde(default)]
     pub definition: Option<serde_json::Value>,
+    // Additional fields that might be present
+    #[serde(default)]
+    pub created: Option<String>,
+    #[serde(default)]
+    pub modified: Option<String>,
+    #[serde(default)]
+    pub revision: Option<i64>,
+    // Catch any other fields
+    #[serde(flatten)]
+    pub extra: std::collections::HashMap<String, serde_json::Value>,
 }
 
 /// ESC Open session response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EscOpenResponse {
-    pub id: String,
+    #[serde(default)]
+    pub id: Option<String>,
     #[serde(default)]
     pub properties: Option<serde_json::Value>,
     #[serde(default)]
