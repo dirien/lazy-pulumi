@@ -139,6 +139,9 @@ pub struct App {
     pub(super) neo_hide_task_list: bool,
     /// Show Neo task details dialog
     pub(super) show_neo_details: bool,
+    /// Current task is running (from task status API)
+    /// Used to keep thinking indicator visible until confirmed not running
+    pub(super) neo_task_is_running: bool,
 
     /// Channel for receiving async Neo results
     pub(super) neo_result_rx: mpsc::Receiver<NeoAsyncResult>,
@@ -151,6 +154,11 @@ pub struct App {
     pub(super) data_result_tx: mpsc::Sender<DataLoadResult>,
     /// Number of pending data load operations
     pub(super) pending_data_loads: u8,
+
+    /// Channel for receiving async startup check results
+    pub(super) startup_result_rx: mpsc::Receiver<types::StartupCheckResult>,
+    /// Channel sender for async startup checks
+    pub(super) startup_result_tx: mpsc::Sender<types::StartupCheckResult>,
 }
 
 impl App {
@@ -177,6 +185,9 @@ impl App {
 
         // Create channel for async data loading results
         let (data_result_tx, data_result_rx) = mpsc::channel::<DataLoadResult>(32);
+
+        // Create channel for async startup check results
+        let (startup_result_tx, startup_result_rx) = mpsc::channel::<types::StartupCheckResult>(4);
 
         // Determine if splash should be shown based on config
         let show_splash = config.show_splash;
@@ -225,11 +236,14 @@ impl App {
             neo_auto_scroll: Arc::new(AtomicBool::new(true)),
             neo_hide_task_list: false,
             show_neo_details: false,
+            neo_task_is_running: false,
             neo_result_rx,
             neo_result_tx,
             data_result_rx,
             data_result_tx,
             pending_data_loads: 0,
+            startup_result_rx,
+            startup_result_tx,
         };
 
         // If splash is not shown, run startup checks and load data immediately
@@ -251,13 +265,16 @@ impl App {
     /// Main run loop
     pub async fn run(&mut self) -> Result<()> {
         while !self.should_quit {
-            // Run startup checks if showing splash and not started yet
+            // Spawn startup checks if showing splash and not started yet
             if self.show_splash && !self.startup_checks_started {
-                self.run_startup_checks().await;
+                self.spawn_startup_checks();
             }
 
             // Render
             self.render()?;
+
+            // Check for async startup check results (non-blocking)
+            self.process_startup_results().await;
 
             // Check for async data loading results (non-blocking)
             self.process_data_results();
@@ -327,7 +344,8 @@ impl App {
         let logs_cache = &self.logs_cache;
         let is_loading = self.is_loading;
         // For Neo tab, show spinner when polling (waiting for response)
-        let neo_is_thinking = self.neo_polling || self.is_loading;
+        // Also show if task status indicates it's still running (even if polling stopped)
+        let neo_is_thinking = self.neo_polling || self.is_loading || self.neo_task_is_running;
         let spinner_char = self.spinner.char();
         let spinner_message = self.spinner.message();
         let error_msg = self.error.clone();

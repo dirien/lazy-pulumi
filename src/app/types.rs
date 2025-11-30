@@ -41,6 +41,15 @@ pub enum NeoAsyncResult {
     Error(String),
 }
 
+/// Startup check async result
+#[derive(Debug)]
+pub enum StartupCheckResult {
+    /// Token check completed
+    TokenCheck(crate::startup::CheckStatus),
+    /// CLI check completed
+    CliCheck(crate::startup::CheckStatus),
+}
+
 /// Application tabs/views
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
