@@ -129,14 +129,14 @@ fn render_environment_details(
                 Line::from(vec![
                     Span::styled("Created:      ", theme.text_secondary()),
                     Span::styled(
-                        env.created_at.as_deref().unwrap_or("Unknown"),
+                        env.created.as_deref().unwrap_or("Unknown"),
                         theme.text(),
                     ),
                 ]),
                 Line::from(vec![
                     Span::styled("Modified:     ", theme.text_secondary()),
                     Span::styled(
-                        env.modified_at.as_deref().unwrap_or("Unknown"),
+                        env.modified.as_deref().unwrap_or("Unknown"),
                         theme.text(),
                     ),
                 ]),

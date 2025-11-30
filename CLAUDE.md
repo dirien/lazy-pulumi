@@ -238,6 +238,33 @@ Note: API may return `null` for array fields. Use custom deserializer `null_to_e
 - `ApprovalRequest` - Requires user approval
 - `TaskNameChange` - Task renamed by agent
 
+## API Pagination Notes
+
+All list APIs require pagination to get accurate counts. Key details:
+
+### ESC Environments API
+- **Endpoint**: `GET /api/esc/environments/{org}`
+- **Pagination**: Uses `continuationToken` query parameter
+- **Response fields**: `environments` array, no `organization` field in each item (implied from URL)
+- **Field names**: Uses `created` and `modified` (NOT `createdAt`/`modifiedAt`)
+- **Extra fields**: API returns additional fields like `id`, `tags`, `links`, `referrerMetadata`, `settings` - use `#[serde(default)]` to ignore
+
+### Neo Tasks API
+- **Endpoint**: `GET /api/preview/agents/{org}/tasks`
+- **Pagination**: Uses `pageSize` (default 100, max 1000) and `continuationToken`
+- **Response**: `{ tasks: [...], continuationToken: "..." }`
+
+### Resource Search API
+- **Endpoint**: `GET /api/orgs/{org}/search/resourcesv2` (note: v2 endpoint)
+- **Pagination**: Uses `page` (1-based) and `size` parameters
+- **Response**: Includes `pagination.next` URL when more results available
+- **Note**: Old endpoint `/api/orgs/{org}/search/resources` is deprecated
+
+### Stacks API
+- **Endpoint**: `GET /api/user/stacks?organization={org}`
+- **Pagination**: Uses `continuationToken`
+- **Response**: `{ stacks: [...], continuationToken: "..." }`
+
 ## Ratatui LLM Chat Best Practices
 
 When building LLM chat interfaces with Ratatui:

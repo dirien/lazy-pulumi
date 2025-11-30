@@ -116,23 +116,30 @@ impl EscEnvironment {
 
 /// ESC Environment list response
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EscEnvironmentsResponse {
-    pub environments: Vec<EscEnvironmentSummary>,
     #[serde(default)]
-    pub next_token: Option<String>,
+    pub environments: Vec<EscEnvironmentSummary>,
+    /// Continuation token for pagination (API may use either field name)
+    #[serde(default, alias = "nextToken")]
+    pub continuation_token: Option<String>,
 }
 
 /// ESC Environment summary from list
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct EscEnvironmentSummary {
+    #[serde(default)]
     pub organization: String,
+    #[serde(default)]
     pub project: String,
+    #[serde(default)]
     pub name: String,
+    /// Created timestamp (API returns "created", not "createdAt")
     #[serde(default)]
-    pub created_at: Option<String>,
+    pub created: Option<String>,
+    /// Modified timestamp (API returns "modified", not "modifiedAt")
     #[serde(default)]
-    pub modified_at: Option<String>,
+    pub modified: Option<String>,
 }
 
 /// ESC Environment details

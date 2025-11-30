@@ -182,7 +182,7 @@ impl PulumiClient {
     // ESC API
     // ─────────────────────────────────────────────────────────────
 
-    /// List ESC environments
+    /// List ESC environments (with pagination to get all results)
     pub async fn list_esc_environments(
         &self,
         org: Option<&str>,
@@ -191,18 +191,65 @@ impl PulumiClient {
             .or(self.config.organization.as_deref())
             .ok_or(ApiError::Parse("No organization specified".to_string()))?;
 
-        let url = format!("{}/api/esc/environments/{}", self.config.base_url, org);
+        let mut all_environments = Vec::new();
+        let mut continuation_token: Option<String> = None;
 
-        let response = self.client.get(&url).send().await?;
-
-        if !response.status().is_success() {
-            let status = response.status().as_u16();
-            let message = response.text().await.unwrap_or_default();
-            return Err(ApiError::ApiResponse { status, message });
+        // Use a flexible response struct that captures any continuation token field
+        #[derive(serde::Deserialize, Debug)]
+        struct FlexibleEscResponse {
+            #[serde(default)]
+            environments: Vec<EscEnvironmentSummary>,
+            #[serde(default, alias = "nextToken", alias = "next_token")]
+            continuation_token: Option<String>,
         }
 
-        let data: EscEnvironmentsResponse = response.json().await?;
-        Ok(data.environments)
+        loop {
+            let url = match &continuation_token {
+                Some(token) => format!(
+                    "{}/api/esc/environments/{}?continuationToken={}",
+                    self.config.base_url,
+                    org,
+                    urlencoding::encode(token)
+                ),
+                None => format!("{}/api/esc/environments/{}", self.config.base_url, org),
+            };
+
+            tracing::debug!("ESC environments: requesting URL: {}", url);
+            let response = self.client.get(&url).send().await?;
+
+            if !response.status().is_success() {
+                let status = response.status().as_u16();
+                let message = response.text().await.unwrap_or_default();
+                tracing::error!("ESC environments API error: {} - {}", status, message);
+                return Err(ApiError::ApiResponse { status, message });
+            }
+
+            let text = response.text().await?;
+            tracing::debug!("ESC environments API response: {}", &text[..text.len().min(1000)]);
+
+            let data: FlexibleEscResponse = serde_json::from_str(&text).map_err(|e| {
+                tracing::error!("Failed to parse ESC environments: {}. Response: {}", e, &text[..text.len().min(2000)]);
+                ApiError::Parse(format!("Failed to parse ESC environments: {}", e))
+            })?;
+
+            let fetched_count = data.environments.len();
+            tracing::info!(
+                "ESC environments: fetched {} environments, continuation_token: {:?}",
+                fetched_count,
+                data.continuation_token
+            );
+            all_environments.extend(data.environments);
+
+            match data.continuation_token {
+                Some(token) if !token.is_empty() => {
+                    continuation_token = Some(token);
+                }
+                _ => break,
+            }
+        }
+
+        tracing::info!("ESC environments: total {} environments fetched for org '{}'", all_environments.len(), org);
+        Ok(all_environments)
     }
 
     /// Get ESC environment details
@@ -255,47 +302,94 @@ impl PulumiClient {
     // Neo API (Preview Agents API)
     // ─────────────────────────────────────────────────────────────
 
-    /// List Neo tasks
+    /// List Neo tasks (with pagination to get all results)
     pub async fn list_neo_tasks(&self, org: Option<&str>) -> Result<Vec<NeoTask>, ApiError> {
         let org = org
             .or(self.config.organization.as_deref())
             .ok_or(ApiError::Parse("No organization specified".to_string()))?;
 
-        let url = format!(
-            "{}/api/preview/agents/{}/tasks?pageSize=50",
-            self.config.base_url, org
-        );
+        let mut all_tasks = Vec::new();
+        let mut continuation_token: Option<String> = None;
+        let page_size = 100;
 
-        let response = self.client.get(&url).send().await?;
-
-        if !response.status().is_success() {
-            let status = response.status().as_u16();
-            let message = response.text().await.unwrap_or_default();
-            return Err(ApiError::ApiResponse { status, message });
-        }
-
-        let text = response.text().await?;
-        tracing::debug!("Neo tasks API response: {}", &text[..text.len().min(500)]);
-
-        // Try parsing as { tasks: [...] } first
-        #[derive(serde::Deserialize)]
+        #[derive(serde::Deserialize, Debug)]
+        #[serde(rename_all = "camelCase")]
         struct TasksResponse {
             #[serde(default)]
             tasks: Vec<NeoTask>,
+            #[serde(default)]
+            continuation_token: Option<String>,
         }
 
-        if let Ok(data) = serde_json::from_str::<TasksResponse>(&text) {
-            return Ok(data.tasks);
+        loop {
+            let url = match &continuation_token {
+                Some(token) => format!(
+                    "{}/api/preview/agents/{}/tasks?pageSize={}&continuationToken={}",
+                    self.config.base_url,
+                    org,
+                    page_size,
+                    urlencoding::encode(token)
+                ),
+                None => format!(
+                    "{}/api/preview/agents/{}/tasks?pageSize={}",
+                    self.config.base_url, org, page_size
+                ),
+            };
+
+            let response = self.client.get(&url).send().await?;
+
+            if !response.status().is_success() {
+                let status = response.status().as_u16();
+                let message = response.text().await.unwrap_or_default();
+                return Err(ApiError::ApiResponse { status, message });
+            }
+
+            let text = response.text().await?;
+            tracing::debug!("Neo tasks API response (first 500 chars): {}", &text[..text.len().min(500)]);
+
+            // Try parsing as { tasks: [...], continuationToken: ... } first
+            if let Ok(data) = serde_json::from_str::<TasksResponse>(&text) {
+                let fetched_count = data.tasks.len();
+                tracing::debug!(
+                    "Neo tasks: fetched {} tasks, continuation_token: {:?}",
+                    fetched_count,
+                    data.continuation_token
+                );
+                all_tasks.extend(data.tasks);
+
+                // Check if there are more pages
+                match data.continuation_token {
+                    Some(token) if !token.is_empty() => {
+                        continuation_token = Some(token);
+                    }
+                    _ => {
+                        // No more pages - also break if we got fewer than page_size
+                        if fetched_count < page_size {
+                            break;
+                        }
+                        // If we got exactly page_size but no token, still break
+                        break;
+                    }
+                }
+            } else if let Ok(tasks) = serde_json::from_str::<Vec<NeoTask>>(&text) {
+                // Try parsing as direct array (no pagination in this format)
+                all_tasks.extend(tasks);
+                break;
+            } else {
+                // Log and return error
+                tracing::error!("Failed to parse Neo tasks response. Response: {}", &text[..text.len().min(1000)]);
+                return Err(ApiError::Parse("Failed to parse tasks response".to_string()));
+            }
+
+            // Safety limit to prevent infinite loops
+            if all_tasks.len() > 10000 {
+                tracing::warn!("Neo tasks pagination safety limit reached");
+                break;
+            }
         }
 
-        // Try parsing as direct array
-        if let Ok(tasks) = serde_json::from_str::<Vec<NeoTask>>(&text) {
-            return Ok(tasks);
-        }
-
-        // Log and return error
-        tracing::error!("Failed to parse Neo tasks response. Response: {}", &text[..text.len().min(1000)]);
-        Err(ApiError::Parse("Failed to parse tasks response".to_string()))
+        tracing::info!("Neo tasks: total {} tasks fetched", all_tasks.len());
+        Ok(all_tasks)
     }
 
     /// Get a single Neo task's metadata by ID
@@ -595,7 +689,7 @@ impl PulumiClient {
     // Resource Search API
     // ─────────────────────────────────────────────────────────────
 
-    /// Search resources
+    /// Search resources (with pagination to get all results)
     pub async fn search_resources(
         &self,
         org: Option<&str>,
@@ -605,23 +699,68 @@ impl PulumiClient {
             .or(self.config.organization.as_deref())
             .ok_or(ApiError::Parse("No organization specified".to_string()))?;
 
-        let url = format!(
-            "{}/api/orgs/{}/search/resources?query={}",
-            self.config.base_url,
-            org,
-            urlencoding::encode(query)
-        );
+        let mut all_resources = Vec::new();
+        let mut page = 1;
+        let page_size = 100;
 
-        let response = self.client.get(&url).send().await?;
-
-        if !response.status().is_success() {
-            let status = response.status().as_u16();
-            let message = response.text().await.unwrap_or_default();
-            return Err(ApiError::ApiResponse { status, message });
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Pagination {
+            #[serde(default)]
+            next: Option<String>,
         }
 
-        let data: ResourceSearchResult = response.json().await?;
-        Ok(data.resources)
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct SearchResponse {
+            #[serde(default)]
+            resources: Vec<Resource>,
+            #[serde(default)]
+            pagination: Option<Pagination>,
+        }
+
+        loop {
+            let url = format!(
+                "{}/api/orgs/{}/search/resourcesv2?query={}&page={}&size={}",
+                self.config.base_url,
+                org,
+                urlencoding::encode(query),
+                page,
+                page_size
+            );
+
+            let response = self.client.get(&url).send().await?;
+
+            if !response.status().is_success() {
+                let status = response.status().as_u16();
+                let message = response.text().await.unwrap_or_default();
+                return Err(ApiError::ApiResponse { status, message });
+            }
+
+            let data: SearchResponse = response.json().await?;
+            let fetched_count = data.resources.len();
+            all_resources.extend(data.resources);
+
+            // Check if there's a next page
+            let has_next = data.pagination
+                .as_ref()
+                .and_then(|p| p.next.as_ref())
+                .is_some();
+
+            // Stop if no next page or we got fewer results than page size
+            if !has_next || fetched_count < page_size {
+                break;
+            }
+
+            page += 1;
+
+            // Safety limit to prevent infinite loops (10,000 resources max via page-based pagination)
+            if page > 100 {
+                break;
+            }
+        }
+
+        Ok(all_resources)
     }
 
     // ─────────────────────────────────────────────────────────────
