@@ -94,6 +94,10 @@ impl App {
                         })
                         .unwrap_or(false);
 
+                    // Update the task running state - this keeps the thinking indicator visible
+                    // until we confirm the task is no longer running
+                    self.neo_task_is_running = task_is_running;
+
                     // Check for assistant response
                     let has_assistant_response =
                         self.state.neo_messages.iter().any(|m| {
@@ -122,12 +126,15 @@ impl App {
                         self.neo_stable_polls = 0;
                         self.neo_prev_message_count = 0;
                         self.neo_current_poll = 0;
+                        // Note: neo_task_is_running is already set above based on task_status
+                        // so the thinking indicator will stay visible if task is still running
                     }
                 }
                 NeoAsyncResult::Error(e) => {
                     self.error = Some(format!("Neo error: {}", e));
                     self.neo_polling = false;
                     self.is_loading = false;
+                    self.neo_task_is_running = false;
                     // Reset poll counters
                     self.neo_stable_polls = 0;
                     self.neo_prev_message_count = 0;
@@ -243,6 +250,8 @@ impl App {
                 self.neo_stable_polls = 0;
                 self.neo_prev_message_count = self.state.neo_messages.len();
                 self.neo_current_poll = 0;
+                // Mark task as running - will be updated by polling
+                self.neo_task_is_running = true;
                 // Enable auto-scroll - render function will handle positioning
                 self.neo_auto_scroll.store(true, Ordering::Relaxed);
             }
@@ -258,6 +267,8 @@ impl App {
             self.neo_auto_scroll.store(true, Ordering::Relaxed);
             // Reset background poll counter to start fresh polling cycle
             self.neo_bg_poll_counter = 0;
+            // Reset task running state - will be updated by polling
+            self.neo_task_is_running = false;
 
             // Try to continue/poll the task to get messages
             if let Some(ref client) = self.client {

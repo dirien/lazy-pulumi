@@ -541,25 +541,51 @@ impl App {
         }
     }
 
-    /// Run startup checks asynchronously
-    pub(super) async fn run_startup_checks(&mut self) {
+    /// Spawn startup checks as background tasks (non-blocking)
+    /// This allows the event loop to continue and the spinner to animate
+    pub(super) fn spawn_startup_checks(&mut self) {
         self.startup_checks_started = true;
 
-        // Run token check first (synchronous)
+        // Set both checks to running state immediately
         self.startup_checks.token_check.status = CheckStatus::Running;
-        // Render to show running state
-        let _ = self.render();
-        self.startup_checks.token_check.status = check_pulumi_token();
-
-        // Run CLI check (async)
         self.startup_checks.cli_check.status = CheckStatus::Running;
-        // Render to show running state
-        let _ = self.render();
-        self.startup_checks.cli_check.status = check_pulumi_cli().await;
 
-        // If all checks passed, load initial data
-        if self.startup_checks.all_passed() {
-            self.load_initial_data().await;
+        // Spawn token check (runs synchronously but in a blocking task)
+        let tx = self.startup_result_tx.clone();
+        tokio::spawn(async move {
+            // Token check is synchronous so we wrap it
+            let status = check_pulumi_token();
+            let _ = tx.send(super::types::StartupCheckResult::TokenCheck(status)).await;
+        });
+
+        // Spawn CLI check (async)
+        let tx = self.startup_result_tx.clone();
+        tokio::spawn(async move {
+            let status = check_pulumi_cli().await;
+            let _ = tx.send(super::types::StartupCheckResult::CliCheck(status)).await;
+        });
+    }
+
+    /// Process startup check results (non-blocking)
+    pub(super) async fn process_startup_results(&mut self) {
+        // Try to receive all pending results without blocking
+        while let Ok(result) = self.startup_result_rx.try_recv() {
+            match result {
+                super::types::StartupCheckResult::TokenCheck(status) => {
+                    self.startup_checks.token_check.status = status;
+                }
+                super::types::StartupCheckResult::CliCheck(status) => {
+                    self.startup_checks.cli_check.status = status;
+                }
+            }
+        }
+
+        // If all checks completed and passed, load initial data
+        if self.startup_checks.all_complete() && self.startup_checks.all_passed() {
+            // Check if we haven't started loading data yet (only load once)
+            if self.state.stacks.is_empty() && !self.is_loading && self.pending_data_loads == 0 {
+                self.load_initial_data().await;
+            }
         }
     }
 
