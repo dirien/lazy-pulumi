@@ -33,6 +33,11 @@ impl<T> StatefulList<T> {
         &self.items
     }
 
+    /// Get mutable access to the items
+    pub fn items_mut(&mut self) -> &mut Vec<T> {
+        &mut self.items
+    }
+
     /// Set the items
     pub fn set_items(&mut self, items: Vec<T>) {
         self.items = items;

@@ -72,6 +72,17 @@ pub fn render_help(frame: &mut Frame, theme: &Theme) {
                 ("Page Up/Down", "Scroll messages"),
             ],
         ),
+        (
+            "Platform View",
+            vec![
+                ("←/h  →/l", "Switch between views"),
+                ("1/2/3", "Jump to Services/Components/Templates"),
+                ("↑/↓", "Navigate list (Components/Templates)"),
+                ("j/k", "Scroll description (Components/Templates)"),
+                ("J/K", "Page scroll description"),
+                ("g / G", "Go to first/last item"),
+            ],
+        ),
     ];
 
     let mut lines: Vec<Line> = Vec::new();

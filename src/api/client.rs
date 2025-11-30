@@ -1,6 +1,12 @@
 //! Main Pulumi API client
 
-use super::types::*;
+use super::types::{
+    ApiConfig, EscEnvironmentDetails, EscEnvironmentsResponse, EscEnvironmentSummary,
+    EscOpenResponse, NeoCreateTaskResponse, NeoMessage, NeoMessageType, NeoTask, NeoTaskResponse,
+    NeoToolCall, RegistryPackage, RegistryPackagesResponse, RegistryTemplate,
+    RegistryTemplatesResponse, Resource, ResourceSearchResult, Service, ServicesResponse, Stack,
+    StacksResponse, StackUpdate, User,
+};
 use color_eyre::Result;
 use reqwest::{header, Client};
 use std::env;
@@ -627,6 +633,86 @@ impl PulumiClient {
         response.json().await.map_err(ApiError::Http)
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // Platform API (Services, Components, Templates)
+    // ─────────────────────────────────────────────────────────────
+
+    /// List services in an organization
+    pub async fn list_services(&self, org: Option<&str>) -> Result<Vec<Service>, ApiError> {
+        let org = org
+            .or(self.config.organization.as_deref())
+            .ok_or(ApiError::Parse("No organization specified".to_string()))?;
+
+        let url = format!("{}/api/orgs/{}/services", self.config.base_url, org);
+
+        let response = self.client.get(&url).send().await?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let message = response.text().await.unwrap_or_default();
+            return Err(ApiError::ApiResponse { status, message });
+        }
+
+        let data: ServicesResponse = response.json().await?;
+        Ok(data.services)
+    }
+
+    /// List registry packages (components)
+    pub async fn list_registry_packages(
+        &self,
+        org: Option<&str>,
+    ) -> Result<Vec<RegistryPackage>, ApiError> {
+        let org = org
+            .or(self.config.organization.as_deref())
+            .ok_or(ApiError::Parse("No organization specified".to_string()))?;
+
+        let url = format!(
+            "{}/api/preview/registry/packages?orgLogin={}&limit=50",
+            self.config.base_url, org
+        );
+
+        let response = self.client.get(&url).send().await?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let message = response.text().await.unwrap_or_default();
+            return Err(ApiError::ApiResponse { status, message });
+        }
+
+        let data: RegistryPackagesResponse = response.json().await?;
+        Ok(data.packages)
+    }
+
+    /// List registry templates
+    pub async fn list_registry_templates(
+        &self,
+        org: Option<&str>,
+    ) -> Result<Vec<RegistryTemplate>, ApiError> {
+        let org = org
+            .or(self.config.organization.as_deref())
+            .ok_or(ApiError::Parse("No organization specified".to_string()))?;
+
+        let url = format!(
+            "{}/api/preview/registry/templates?orgLogin={}",
+            self.config.base_url, org
+        );
+
+        let response = self.client.get(&url).send().await?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let message = response.text().await.unwrap_or_default();
+            return Err(ApiError::ApiResponse { status, message });
+        }
+
+        let data: RegistryTemplatesResponse = response.json().await?;
+        Ok(data.templates)
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Organizations API
+    // ─────────────────────────────────────────────────────────────
+
     /// List organizations for current user
     pub async fn list_organizations(&self) -> Result<Vec<String>, ApiError> {
         // The organizations are returned as part of the /api/user response
@@ -673,5 +759,18 @@ impl PulumiClient {
         }
 
         Ok(orgs)
+    }
+
+    /// Fetch README content from a URL
+    pub async fn fetch_readme(&self, readme_url: &str) -> Result<String, ApiError> {
+        let response = self.client.get(readme_url).send().await?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let message = response.text().await.unwrap_or_default();
+            return Err(ApiError::ApiResponse { status, message });
+        }
+
+        response.text().await.map_err(ApiError::Http)
     }
 }

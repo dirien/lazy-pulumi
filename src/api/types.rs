@@ -290,3 +290,180 @@ pub struct User {
     #[serde(default)]
     pub role: Option<String>,
 }
+
+// ─────────────────────────────────────────────────────────────
+// Platform Types (Services, Components, Templates)
+// ─────────────────────────────────────────────────────────────
+
+/// Service owner information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServiceOwner {
+    #[serde(rename = "type")]
+    pub owner_type: String,
+    pub name: String,
+}
+
+/// Service item count summary
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ServiceItemCountSummary {
+    #[serde(default)]
+    pub stacks: Option<i32>,
+    #[serde(default)]
+    pub environments: Option<i32>,
+}
+
+/// Pulumi Service
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Service {
+    pub organization_name: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub owner: Option<ServiceOwner>,
+    #[serde(default)]
+    pub item_count_summary: Option<ServiceItemCountSummary>,
+    #[serde(default)]
+    pub created_at: Option<String>,
+    #[serde(default)]
+    pub modified_at: Option<String>,
+}
+
+impl Service {
+    #[allow(dead_code)]
+    pub fn display_name(&self) -> String {
+        self.name.clone()
+    }
+
+    pub fn item_count(&self) -> String {
+        if let Some(ref summary) = self.item_count_summary {
+            let stacks = summary.stacks.unwrap_or(0);
+            let envs = summary.environments.unwrap_or(0);
+            format!("{} stacks, {} envs", stacks, envs)
+        } else {
+            "0 items".to_string()
+        }
+    }
+}
+
+/// Services list response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServicesResponse {
+    #[serde(default)]
+    pub services: Vec<Service>,
+    #[serde(default)]
+    pub continuation_token: Option<String>,
+}
+
+/// Registry Package/Component
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegistryPackage {
+    pub name: String,
+    #[serde(default)]
+    pub publisher: Option<String>,
+    #[serde(default)]
+    pub source: Option<String>,
+    #[serde(default)]
+    pub version: Option<String>,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub logo_url: Option<String>,
+    #[serde(default)]
+    pub repository_url: Option<String>,
+    /// URL to the README markdown content
+    #[serde(default, rename = "readmeURL")]
+    pub readme_url: Option<String>,
+    /// Loaded README content (fetched separately)
+    #[serde(skip)]
+    pub readme_content: Option<String>,
+}
+
+impl RegistryPackage {
+    pub fn display_name(&self) -> String {
+        self.title.clone().unwrap_or_else(|| self.name.clone())
+    }
+
+    /// Get a unique key for this package (used for README caching)
+    pub fn key(&self) -> String {
+        format!(
+            "{}/{}/{}",
+            self.source.as_deref().unwrap_or("pulumi"),
+            self.publisher.as_deref().unwrap_or("unknown"),
+            self.name
+        )
+    }
+
+    pub fn full_name(&self) -> String {
+        let source = self.source.as_deref().unwrap_or("pulumi");
+        let publisher = self.publisher.as_deref().unwrap_or("unknown");
+        format!("{}/{}/{}", source, publisher, self.name)
+    }
+}
+
+/// Registry packages list response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegistryPackagesResponse {
+    #[serde(default)]
+    pub packages: Vec<RegistryPackage>,
+    #[serde(default)]
+    pub continuation_token: Option<String>,
+}
+
+/// Template runtime configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TemplateRuntime {
+    pub name: String,
+    #[serde(default)]
+    pub options: Option<serde_json::Value>,
+}
+
+/// Registry Template
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegistryTemplate {
+    pub name: String,
+    #[serde(default)]
+    pub publisher: Option<String>,
+    #[serde(default)]
+    pub source: Option<String>,
+    #[serde(default)]
+    pub version: Option<String>,
+    #[serde(default)]
+    pub display_name: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub language: Option<String>,
+    #[serde(default)]
+    pub runtime: Option<TemplateRuntime>,
+    #[serde(default)]
+    pub project_name: Option<String>,
+}
+
+impl RegistryTemplate {
+    pub fn display(&self) -> String {
+        self.display_name.clone().unwrap_or_else(|| self.name.clone())
+    }
+
+    pub fn full_name(&self) -> String {
+        let source = self.source.as_deref().unwrap_or("private");
+        let publisher = self.publisher.as_deref().unwrap_or("unknown");
+        format!("{}/{}/{}", source, publisher, self.name)
+    }
+}
+
+/// Registry templates list response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegistryTemplatesResponse {
+    #[serde(default)]
+    pub templates: Vec<RegistryTemplate>,
+    #[serde(default)]
+    pub continuation_token: Option<String>,
+}
