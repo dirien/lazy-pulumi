@@ -65,6 +65,7 @@ pub fn highlight_yaml(content: &str) -> Vec<Line<'static>> {
 }
 
 /// Highlight JSON content and return ratatui Lines
+#[allow(dead_code)]
 pub fn highlight_json(content: &str) -> Vec<Line<'static>> {
     let syntax = SYNTAX_SET
         .find_syntax_by_extension("json")
