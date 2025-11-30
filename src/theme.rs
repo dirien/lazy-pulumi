@@ -226,7 +226,7 @@ impl Theme {
         Style::default().bg(self.bg_medium)
     }
 
-    /// NEO message (from NEO)
+    /// Neo message (from Neo)
     pub fn neo_message(&self) -> Style {
         Style::default().fg(self.secondary)
     }

@@ -41,7 +41,7 @@ pub enum DataLoadResult {
     Error(String),
 }
 
-/// NEO async operation result
+/// Neo async operation result
 #[derive(Debug)]
 pub enum NeoAsyncResult {
     /// Task created successfully
@@ -68,7 +68,8 @@ pub enum Tab {
 
 impl Tab {
     pub fn all() -> &'static [Tab] {
-        &[Tab::Dashboard, Tab::Stacks, Tab::Esc, Tab::Neo, Tab::Platform]
+        // Neo is second after Dashboard
+        &[Tab::Dashboard, Tab::Neo, Tab::Stacks, Tab::Esc, Tab::Platform]
     }
 
     pub fn title(&self) -> &'static str {
@@ -76,7 +77,7 @@ impl Tab {
             Tab::Dashboard => " Dashboard ",
             Tab::Stacks => " Stacks ",
             Tab::Esc => " Environment ",
-            Tab::Neo => " NEO ",
+            Tab::Neo => " Neo ",
             Tab::Platform => " Platform ",
         }
     }
@@ -84,9 +85,9 @@ impl Tab {
     pub fn index(&self) -> usize {
         match self {
             Tab::Dashboard => 0,
-            Tab::Stacks => 1,
-            Tab::Esc => 2,
-            Tab::Neo => 3,
+            Tab::Neo => 1,
+            Tab::Stacks => 2,
+            Tab::Esc => 3,
             Tab::Platform => 4,
         }
     }
@@ -94,9 +95,9 @@ impl Tab {
     pub fn from_index(index: usize) -> Self {
         match index {
             0 => Tab::Dashboard,
-            1 => Tab::Stacks,
-            2 => Tab::Esc,
-            3 => Tab::Neo,
+            1 => Tab::Neo,
+            2 => Tab::Stacks,
+            3 => Tab::Esc,
             4 => Tab::Platform,
             _ => Tab::Dashboard,
         }
@@ -182,7 +183,7 @@ pub struct AppState {
     pub selected_env_yaml: Option<String>,
     pub selected_env_values: Option<serde_json::Value>,
 
-    // NEO conversation
+    // Neo conversation
     pub neo_messages: Vec<NeoMessage>,
     pub current_task_id: Option<String>,
 
@@ -302,7 +303,7 @@ pub struct App {
     /// Scroll state for Component/Template description panel
     platform_desc_scroll_state: ScrollViewState,
 
-    /// NEO polling state - tracks if we're waiting for agent response
+    /// Neo polling state - tracks if we're waiting for agent response
     neo_polling: bool,
     /// Counter for polling interval (poll every N ticks)
     neo_poll_counter: u8,
@@ -314,16 +315,18 @@ pub struct App {
     neo_max_polls: u8,
     /// Current poll count
     neo_current_poll: u8,
-    /// Background poll counter for when NEO tab is active
+    /// Background poll counter for when Neo tab is active
     neo_bg_poll_counter: u8,
-    /// NEO chat scroll view state
+    /// Neo chat scroll view state
     neo_scroll_state: ScrollViewState,
     /// Auto-scroll to bottom when new messages arrive
     neo_auto_scroll: Arc<AtomicBool>,
+    /// Hide task list when a task is selected (full-width chat)
+    neo_hide_task_list: bool,
 
-    /// Channel for receiving async NEO results
+    /// Channel for receiving async Neo results
     neo_result_rx: mpsc::Receiver<NeoAsyncResult>,
-    /// Channel sender for NEO async tasks (wrapped in Arc for cloning)
+    /// Channel sender for Neo async tasks (wrapped in Arc for cloning)
     neo_result_tx: mpsc::Sender<NeoAsyncResult>,
 
     /// Channel for receiving async data loading results
@@ -387,7 +390,7 @@ impl App {
             }
         };
 
-        // Create channel for async NEO results
+        // Create channel for async Neo results
         let (neo_result_tx, neo_result_rx) = mpsc::channel::<NeoAsyncResult>(32);
 
         // Create channel for async data loading results
@@ -438,6 +441,7 @@ impl App {
             neo_bg_poll_counter: 0,
             neo_scroll_state: ScrollViewState::default(),
             neo_auto_scroll: Arc::new(AtomicBool::new(true)),
+            neo_hide_task_list: false,
             neo_result_rx,
             neo_result_tx,
             data_result_rx,
@@ -526,7 +530,7 @@ impl App {
             tokio::spawn(async move {
                 match client3.list_neo_tasks(org3.as_deref()).await {
                     Ok(tasks) => { let _ = tx3.send(DataLoadResult::NeoTasks(tasks)).await; }
-                    Err(e) => { let _ = tx3.send(DataLoadResult::Error(format!("NEO: {}", e))).await; }
+                    Err(e) => { let _ = tx3.send(DataLoadResult::Error(format!("Neo: {}", e))).await; }
                 }
             });
 
@@ -635,14 +639,14 @@ impl App {
             // Check for async data loading results (non-blocking)
             self.process_data_results();
 
-            // Check for async NEO results (non-blocking)
+            // Check for async Neo results (non-blocking)
             self.process_neo_results();
 
             // Handle events
             match self.events.next().await? {
                 Event::Tick => {
                     self.spinner.tick();
-                    // Poll for NEO updates if we're waiting for a response (fast polling)
+                    // Poll for Neo updates if we're waiting for a response (fast polling)
                     if self.neo_polling {
                         self.neo_poll_counter += 1;
                         // Poll every 5 ticks (~500ms at 100ms tick rate)
@@ -651,7 +655,7 @@ impl App {
                             self.spawn_neo_poll();
                         }
                     }
-                    // Background polling when NEO tab is active with a task selected
+                    // Background polling when Neo tab is active with a task selected
                     else if self.tab == Tab::Neo && self.state.current_task_id.is_some() {
                         self.neo_bg_poll_counter += 1;
                         // Background poll every 30 ticks (~3 seconds at 100ms tick rate)
@@ -682,7 +686,7 @@ impl App {
         Ok(())
     }
 
-    /// Process any pending async NEO results
+    /// Process any pending async Neo results
     fn process_neo_results(&mut self) {
         // Try to receive all pending results without blocking
         while let Ok(result) = self.neo_result_rx.try_recv() {
@@ -731,10 +735,7 @@ impl App {
 
                         if has_new_content {
                             self.state.neo_messages = messages;
-                            // Auto-scroll to bottom if enabled
-                            if self.neo_auto_scroll.load(Ordering::Relaxed) {
-                                self.neo_scroll_state.scroll_to_bottom();
-                            }
+                            // Auto-scroll is handled by the render function
                             // Reset stable counter since we got new content
                             self.neo_stable_polls = 0;
                         } else {
@@ -770,7 +771,7 @@ impl App {
                     }
                 }
                 NeoAsyncResult::Error(e) => {
-                    self.error = Some(format!("NEO error: {}", e));
+                    self.error = Some(format!("Neo error: {}", e));
                     self.neo_polling = false;
                     self.is_loading = false;
                     // Reset poll counters
@@ -782,7 +783,7 @@ impl App {
         }
     }
 
-    /// Spawn async task to poll NEO events
+    /// Spawn async task to poll Neo events
     fn spawn_neo_poll(&self) {
         if let (Some(task_id), Some(org)) = (&self.state.current_task_id, &self.state.organization) {
             if let Some(ref client) = self.client {
@@ -800,7 +801,7 @@ impl App {
                             }).await;
                         }
                         Err(e) => {
-                            tracing::warn!("Failed to poll NEO task: {}", e);
+                            tracing::warn!("Failed to poll Neo task: {}", e);
                             // Don't send error for transient poll failures
                         }
                     }
@@ -809,7 +810,7 @@ impl App {
         }
     }
 
-    /// Poll for NEO task updates
+    /// Poll for Neo task updates
     #[allow(dead_code)]
     async fn poll_neo_task(&mut self) {
         if let Some(task_id) = &self.state.current_task_id.clone() {
@@ -835,7 +836,7 @@ impl App {
                             }
                         }
                         Err(e) => {
-                            tracing::warn!("Failed to poll NEO task: {}", e);
+                            tracing::warn!("Failed to poll Neo task: {}", e);
                             // Don't stop polling on transient errors
                         }
                     }
@@ -859,7 +860,7 @@ impl App {
         let logs_word_wrap = self.logs_word_wrap;
         let logs_cache = &self.logs_cache;
         let is_loading = self.is_loading;
-        // For NEO tab, show spinner when polling (waiting for response)
+        // For Neo tab, show spinner when polling (waiting for response)
         let neo_is_thinking = self.neo_polling || self.is_loading;
         let spinner_char = self.spinner.char();
         let spinner_message = self.spinner.message();
@@ -877,6 +878,7 @@ impl App {
         let org_list = &mut self.org_list;
         let neo_scroll_state = &mut self.neo_scroll_state;
         let neo_auto_scroll = self.neo_auto_scroll.clone();
+        let neo_hide_task_list = self.neo_hide_task_list;
 
         // Platform state
         let platform_view = self.platform_view;
@@ -933,6 +935,7 @@ impl App {
                         &neo_auto_scroll,
                         neo_is_thinking,
                         spinner_char,
+                        neo_hide_task_list,
                     );
                 }
                 Tab::Platform => {
@@ -1005,7 +1008,11 @@ impl App {
                 Tab::Dashboard => "Tab: switch | o: org | l: logs | ?: help | r: refresh | q: quit".to_string(),
                 Tab::Stacks => "↑↓: navigate | o: org | l: logs | Enter: details | r: refresh | q: quit".to_string(),
                 Tab::Esc => "↑↓: navigate | o: org | l: logs | Enter: load | O: resolve | q: quit".to_string(),
-                Tab::Neo => "↑↓: tasks | j/k: scroll | o: org | l: logs | n: new | i: type | q: quit".to_string(),
+                Tab::Neo => if self.neo_hide_task_list {
+                    "j/k: scroll | n: new | i: type | Esc: show tasks | q: quit".to_string()
+                } else {
+                    "↑↓: tasks | Enter: select | n: new | i: type | q: quit".to_string()
+                },
                 Tab::Platform => "↑↓: navigate | ←→: switch view | o: org | l: logs | r: refresh | q: quit".to_string(),
             },
         }
@@ -1289,8 +1296,16 @@ impl App {
         }
     }
 
-    /// Handle NEO view keys
+    /// Handle Neo view keys
     async fn handle_neo_key(&mut self, key: KeyEvent) {
+        // Esc shows the task list again (if hidden)
+        if keys::is_escape(&key) {
+            if self.neo_hide_task_list {
+                self.neo_hide_task_list = false;
+            }
+            return;
+        }
+
         if keys::is_char(&key, 'i') {
             self.focus = FocusMode::Input;
             self.neo_input.set_focused(true);
@@ -1300,14 +1315,30 @@ impl App {
             self.state.current_task_id = None;
             self.neo_scroll_state = ScrollViewState::default();
             self.neo_auto_scroll.store(true, Ordering::Relaxed);
+            self.neo_hide_task_list = true; // Hide task list for new conversation
             self.focus = FocusMode::Input;
             self.neo_input.set_focused(true);
         } else if keys::is_up(&key) {
-            // Navigate task list
-            self.neo_tasks_list.previous();
+            if !self.neo_hide_task_list {
+                // Navigate task list when visible
+                self.neo_tasks_list.previous();
+            } else {
+                // Scroll chat up when in full-width mode
+                for _ in 0..3 {
+                    self.neo_scroll_state.scroll_up();
+                }
+                self.neo_auto_scroll.store(false, Ordering::Relaxed);
+            }
         } else if keys::is_down(&key) {
-            // Navigate task list
-            self.neo_tasks_list.next();
+            if !self.neo_hide_task_list {
+                // Navigate task list when visible
+                self.neo_tasks_list.next();
+            } else {
+                // Scroll chat down when in full-width mode
+                for _ in 0..3 {
+                    self.neo_scroll_state.scroll_down();
+                }
+            }
         } else if keys::is_char(&key, 'k') {
             // Scroll chat up (vim-style) - toward older messages
             for _ in 0..3 {
@@ -1328,19 +1359,22 @@ impl App {
             self.neo_scroll_state.scroll_page_down();
         } else if keys::is_char(&key, 'G') {
             // Scroll to bottom (newest messages) - re-enable auto-scroll
-            self.neo_scroll_state.scroll_to_bottom();
+            // The render function will handle the actual scroll position
             self.neo_auto_scroll.store(true, Ordering::Relaxed);
         } else if keys::is_char(&key, 'g') {
             // Scroll to top (oldest messages)
             self.neo_scroll_state.scroll_to_top();
             self.neo_auto_scroll.store(false, Ordering::Relaxed);
         } else if keys::is_enter(&key) {
-            // Only load task events when Enter is pressed
-            self.load_selected_task().await;
+            // Load task and hide task list for full-width chat
+            if !self.neo_hide_task_list {
+                self.load_selected_task().await;
+                self.neo_hide_task_list = true;
+            }
         }
     }
 
-    /// Load selected NEO task
+    /// Load selected Neo task
     async fn load_selected_task(&mut self) {
         if let Some(task) = self.neo_tasks_list.selected() {
             self.state.current_task_id = Some(task.id.clone());
@@ -1357,8 +1391,7 @@ impl App {
 
                     if let Ok(response) = client.continue_neo_task(org, &task.id, None).await {
                         self.state.neo_messages = response.messages;
-                        // Scroll to bottom after loading messages
-                        self.neo_scroll_state.scroll_to_bottom();
+                        // Auto-scroll is handled by the render function
                     }
 
                     self.is_loading = false;
@@ -1367,7 +1400,7 @@ impl App {
         }
     }
 
-    /// Send a message to NEO (non-blocking)
+    /// Send a message to Neo (non-blocking)
     fn send_neo_message(&mut self) {
         let message = self.neo_input.take();
         if message.trim().is_empty() {
@@ -1384,10 +1417,12 @@ impl App {
             tool_name: None,
         });
 
+        // Auto-scroll is handled by the render function
+
         self.focus = FocusMode::Normal;
         self.neo_input.set_focused(false);
         self.is_loading = true;
-        self.spinner.set_message("NEO is thinking...");
+        self.spinner.set_message("Neo is thinking...");
 
         // Spawn async task to send message
         if let Some(ref client) = self.client {
@@ -1426,8 +1461,7 @@ impl App {
                 self.neo_stable_polls = 0;
                 self.neo_prev_message_count = self.state.neo_messages.len();
                 self.neo_current_poll = 0;
-                // Scroll to bottom and enable auto-scroll
-                self.neo_scroll_state.scroll_to_bottom();
+                // Enable auto-scroll - render function will handle positioning
                 self.neo_auto_scroll.store(true, Ordering::Relaxed);
             }
         }
