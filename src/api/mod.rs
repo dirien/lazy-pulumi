@@ -11,6 +11,6 @@ mod types;
 
 pub use client::PulumiClient;
 pub use types::{
-    EscEnvironmentSummary, NeoMessage, NeoMessageType, NeoTask, RegistryPackage, RegistryTemplate,
-    Resource, Service, Stack,
+    EscEnvironmentSummary, NeoMessage, NeoMessageType, NeoTask, OrgStackUpdate, RegistryPackage,
+    RegistryTemplate, Resource, ResourceSummaryPoint, Service, Stack,
 };

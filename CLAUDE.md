@@ -341,6 +341,41 @@ All list APIs require pagination to get accurate counts. Key details:
 - **Pagination**: Uses `continuationToken`
 - **Response**: `{ stacks: [...], continuationToken: "..." }`
 
+### Recent Stack Updates API (Console)
+- **Endpoint**: `GET /api/console/orgs/{org}/stacks/updates/recent?limit=N`
+- **Returns**: Array of stacks with their `lastUpdate` containing `requestedBy`, `info`, `version`
+- **Used for**: Dashboard "Recent Stack Updates" panel
+
+### Resource Summary API
+- **Endpoint**: `GET /api/orgs/{org}/resources/summary?granularity=daily&lookbackDays=N`
+- **Returns**: `{ summary: [{ year, month, day, resources, resourceHours }, ...] }`
+- **Used for**: Dashboard "Resource Count Over Time" chart
+
+## Dashboard Features
+
+The dashboard displays:
+
+1. **Stats Cards** (top row):
+   - Stacks count
+   - Environments count
+   - Neo Tasks count
+   - Resources count
+
+2. **Resource Count Over Time** (full-width chart):
+   - Uses ratatui `Chart` widget with `GraphType::Line` and `Marker::Braille`
+   - Shows resource count over the last 30 days
+   - X-axis: date labels (first and last date)
+   - Y-axis: resource count with auto-calculated bounds
+   - Data from `/api/orgs/{org}/resources/summary` API
+
+3. **Recent Stack Updates** (bottom left):
+   - Shows last 5 unique stack updates (deduplicated by project/stack)
+   - Format: `project / stack / Update #N` + `username updated X ago`
+   - Data from `/api/console/orgs/{org}/stacks/updates/recent` API
+
+4. **Quick Info** (bottom right):
+   - Keyboard shortcuts: Tab (views), ? (help), r (refresh)
+
 ## Ratatui LLM Chat Best Practices
 
 When building LLM chat interfaces with Ratatui:

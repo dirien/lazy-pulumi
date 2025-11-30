@@ -177,6 +177,108 @@ impl PulumiClient {
         Ok(data.updates)
     }
 
+    /// Get recent updates across all stacks in the organization
+    /// Uses the console API which returns all data in a single call
+    pub async fn get_org_recent_updates(
+        &self,
+        org: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<super::types::OrgStackUpdate>, ApiError> {
+        let org = org
+            .or(self.config.organization.as_deref())
+            .ok_or(ApiError::Parse("No organization specified".to_string()))?;
+
+        let url = format!(
+            "{}/api/console/orgs/{}/stacks/updates/recent?limit={}",
+            self.config.base_url, org, limit
+        );
+
+        let response = self.client.get(&url).send().await?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let message = response.text().await.unwrap_or_default();
+            return Err(ApiError::ApiResponse { status, message });
+        }
+
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct RecentUpdateItem {
+            #[serde(default)]
+            org_name: String,
+            /// Stack name
+            #[serde(default)]
+            name: String,
+            #[serde(default)]
+            project: String,
+            #[serde(default)]
+            last_update: Option<LastUpdate>,
+        }
+
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct LastUpdate {
+            #[serde(default)]
+            info: Option<UpdateInfo>,
+            #[serde(default)]
+            version: i32,
+            #[serde(default)]
+            requested_by: Option<RequestedBy>,
+        }
+
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct UpdateInfo {
+            #[serde(default)]
+            kind: String,
+            #[serde(default)]
+            result: String,
+            #[serde(default)]
+            start_time: Option<i64>,
+            #[serde(default)]
+            end_time: Option<i64>,
+            #[serde(default)]
+            resource_changes: Option<super::types::ResourceChanges>,
+        }
+
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct RequestedBy {
+            #[serde(default)]
+            name: Option<String>,
+            #[serde(default)]
+            github_login: Option<String>,
+        }
+
+        let items: Vec<RecentUpdateItem> = response.json().await?;
+
+        let updates: Vec<super::types::OrgStackUpdate> = items
+            .into_iter()
+            .filter_map(|item| {
+                let last_update = item.last_update?;
+                let info = last_update.info?;
+
+                Some(super::types::OrgStackUpdate {
+                    org_name: item.org_name,
+                    project_name: item.project,
+                    stack_name: item.name,
+                    kind: info.kind,
+                    result: info.result,
+                    start_time: info.start_time?,
+                    end_time: info.end_time,
+                    version: last_update.version,
+                    resource_changes: info.resource_changes,
+                    requested_by: last_update.requested_by.and_then(|r| {
+                        // Prefer github_login, fall back to name
+                        r.github_login.or(r.name)
+                    }),
+                })
+            })
+            .collect();
+
+        Ok(updates)
+    }
+
     // ─────────────────────────────────────────────────────────────
     // ESC API
     // ─────────────────────────────────────────────────────────────
@@ -984,5 +1086,37 @@ impl PulumiClient {
         }
 
         response.text().await.map_err(ApiError::Http)
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Resource Summary API
+    // ─────────────────────────────────────────────────────────────
+
+    /// Get resource count summary over time (for dashboard chart)
+    pub async fn get_resource_summary(
+        &self,
+        org: Option<&str>,
+        granularity: &str,
+        lookback_days: i32,
+    ) -> Result<Vec<super::types::ResourceSummaryPoint>, ApiError> {
+        let org = org
+            .or(self.config.organization.as_deref())
+            .ok_or(ApiError::Parse("No organization specified".to_string()))?;
+
+        let url = format!(
+            "{}/api/orgs/{}/resources/summary?granularity={}&lookbackDays={}",
+            self.config.base_url, org, granularity, lookback_days
+        );
+
+        let response = self.client.get(&url).send().await?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let message = response.text().await.unwrap_or_default();
+            return Err(ApiError::ApiResponse { status, message });
+        }
+
+        let data: super::types::ResourceSummaryResponse = response.json().await?;
+        Ok(data.summary)
     }
 }
