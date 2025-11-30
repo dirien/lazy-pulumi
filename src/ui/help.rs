@@ -30,7 +30,8 @@ pub fn render_help(frame: &mut Frame, theme: &Theme) {
             "Global",
             vec![
                 ("Tab / Shift+Tab", "Switch between views"),
-                ("O (capital)", "Select organization"),
+                ("o", "Select organization"),
+                ("l", "View application logs"),
                 ("?", "Toggle help"),
                 ("q / Ctrl+C", "Quit application"),
                 ("r", "Refresh data"),

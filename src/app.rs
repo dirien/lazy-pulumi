@@ -18,6 +18,7 @@ use crate::api::{
 };
 use crate::components::{Spinner, StatefulList, TextInput};
 use crate::event::{keys, Event, EventHandler};
+use crate::logging;
 use crate::theme::Theme;
 use crate::tui::{self, Tui};
 use crate::ui;
@@ -164,6 +165,18 @@ pub struct App {
     /// Show organization selector popup
     show_org_selector: bool,
 
+    /// Show logs popup
+    show_logs: bool,
+
+    /// Log viewer scroll offset
+    logs_scroll_offset: usize,
+
+    /// Log viewer word wrap enabled
+    logs_word_wrap: bool,
+
+    /// Cached log lines
+    logs_cache: Vec<String>,
+
     /// Organization list for selector
     org_list: StatefulList<String>,
 
@@ -275,6 +288,10 @@ impl App {
             focus: FocusMode::Normal,
             show_help: false,
             show_org_selector: false,
+            show_logs: false,
+            logs_scroll_offset: 0,
+            logs_word_wrap: false,
+            logs_cache: Vec::new(),
             org_list: StatefulList::new(),
             is_loading: false,
             spinner: Spinner::new(),
@@ -595,6 +612,10 @@ impl App {
         let org = self.state.organization.as_deref();
         let show_help = self.show_help;
         let show_org_selector = self.show_org_selector;
+        let show_logs = self.show_logs;
+        let logs_scroll_offset = self.logs_scroll_offset;
+        let logs_word_wrap = self.logs_word_wrap;
+        let logs_cache = &self.logs_cache;
         let is_loading = self.is_loading;
         // For NEO tab, show spinner when polling (waiting for response)
         let neo_is_thinking = self.neo_polling || self.is_loading;
@@ -674,6 +695,11 @@ impl App {
                 ui::render_help(frame, theme);
             }
 
+            // Logs popup
+            if show_logs {
+                ui::render_logs(frame, theme, logs_cache, logs_scroll_offset, logs_word_wrap);
+            }
+
             // Error popup
             if let Some(ref error) = error_msg {
                 ui::render_error_popup(frame, theme, error);
@@ -694,6 +720,10 @@ impl App {
             return "Press ? or Esc to close help".to_string();
         }
 
+        if self.show_logs {
+            return "j/k: scroll | g/G: top/bottom | w: wrap | R: refresh | l/Esc: close".to_string();
+        }
+
         if self.show_org_selector {
             return "↑↓: navigate | Enter: select | Esc: cancel".to_string();
         }
@@ -705,10 +735,10 @@ impl App {
         match self.focus {
             FocusMode::Input => "Enter: send | Esc: cancel".to_string(),
             FocusMode::Normal => match self.tab {
-                Tab::Dashboard => "Tab: switch | o: org | ?: help | r: refresh | q: quit".to_string(),
-                Tab::Stacks => "↑↓: navigate | o: org | Enter: details | r: refresh | q: quit".to_string(),
-                Tab::Esc => "↑↓: navigate | o: org | Enter: load | O: resolve | q: quit".to_string(),
-                Tab::Neo => "↑↓: tasks | j/k: scroll | o: org | n: new | i: type | q: quit".to_string(),
+                Tab::Dashboard => "Tab: switch | o: org | l: logs | ?: help | r: refresh | q: quit".to_string(),
+                Tab::Stacks => "↑↓: navigate | o: org | l: logs | Enter: details | r: refresh | q: quit".to_string(),
+                Tab::Esc => "↑↓: navigate | o: org | l: logs | Enter: load | O: resolve | q: quit".to_string(),
+                Tab::Neo => "↑↓: tasks | j/k: scroll | o: org | l: logs | n: new | i: type | q: quit".to_string(),
             },
         }
     }
@@ -727,6 +757,42 @@ impl App {
         if self.show_help {
             if keys::is_escape(&key) || keys::is_char(&key, '?') {
                 self.show_help = false;
+            }
+            return;
+        }
+
+        // Handle logs popup
+        if self.show_logs {
+            if keys::is_escape(&key) || keys::is_char(&key, 'l') {
+                self.show_logs = false;
+            } else if keys::is_char(&key, 'w') {
+                // Toggle word wrap
+                self.logs_word_wrap = !self.logs_word_wrap;
+                // Reset scroll position when toggling wrap mode
+                self.logs_scroll_offset = 0;
+            } else if keys::is_char(&key, 'j') || keys::is_down(&key) {
+                // Scroll down
+                self.logs_scroll_offset = self.logs_scroll_offset.saturating_add(3);
+            } else if keys::is_char(&key, 'k') || keys::is_up(&key) {
+                // Scroll up
+                self.logs_scroll_offset = self.logs_scroll_offset.saturating_sub(3);
+            } else if keys::is_char(&key, 'g') {
+                // Jump to top
+                self.logs_scroll_offset = 0;
+            } else if keys::is_char(&key, 'G') {
+                // Jump to bottom
+                let total_lines = self.logs_cache.len();
+                self.logs_scroll_offset = total_lines.saturating_sub(20);
+            } else if keys::is_page_down(&key) || keys::is_char(&key, 'J') {
+                self.logs_scroll_offset = self.logs_scroll_offset.saturating_add(20);
+            } else if keys::is_page_up(&key) || keys::is_char(&key, 'K') {
+                self.logs_scroll_offset = self.logs_scroll_offset.saturating_sub(20);
+            } else if keys::is_char(&key, 'R') {
+                // Refresh logs
+                self.logs_cache = logging::read_log_tail(None);
+                // Auto-scroll to bottom on refresh
+                let total_lines = self.logs_cache.len();
+                self.logs_scroll_offset = total_lines.saturating_sub(20);
             }
             return;
         }
@@ -789,6 +855,16 @@ impl App {
 
         if keys::is_char(&key, '?') {
             self.show_help = true;
+            return;
+        }
+
+        // Open logs viewer with 'l'
+        if keys::is_char(&key, 'l') {
+            self.logs_cache = logging::read_log_tail(None);
+            // Auto-scroll to bottom
+            let total_lines = self.logs_cache.len();
+            self.logs_scroll_offset = total_lines.saturating_sub(20);
+            self.show_logs = true;
             return;
         }
 
