@@ -590,6 +590,7 @@ impl App {
                     self.stacks_list.set_items(stacks);
                 }
                 DataLoadResult::EscEnvironments(envs) => {
+                    tracing::info!("Received {} ESC environments", envs.len());
                     self.state.esc_environments = envs.clone();
                     self.esc_list.set_items(envs);
                 }
