@@ -502,19 +502,6 @@ impl PulumiClient {
         org: &str,
         task_id: &str,
     ) -> Result<NeoTaskResponse, ApiError> {
-        let url = format!(
-            "{}/api/preview/agents/{}/tasks/{}/events?pageSize=100",
-            self.config.base_url, org, task_id
-        );
-
-        let response = self.client.get(&url).send().await?;
-
-        if !response.status().is_success() {
-            let status = response.status().as_u16();
-            let message = response.text().await.unwrap_or_default();
-            return Err(ApiError::ApiResponse { status, message });
-        }
-
         #[derive(serde::Deserialize, Debug)]
         struct ToolCallRaw {
             #[serde(default)]
@@ -551,6 +538,9 @@ impl PulumiClient {
             /// Message for approval requests
             #[serde(default)]
             message: Option<String>,
+            /// Whether this tool response is an error
+            #[serde(default)]
+            is_error: bool,
         }
 
         /// Custom deserializer that handles content being either a string or JSON object
@@ -586,13 +576,8 @@ impl PulumiClient {
             continuation_token: Option<String>,
         }
 
-        let data: EventsResponse = response.json().await.unwrap_or(EventsResponse {
-            events: vec![],
-            continuation_token: None,
-        });
-
-        // Convert events to messages, including tool calls
-        let messages: Vec<NeoMessage> = data.events.into_iter().filter_map(|event| {
+        // Helper to convert an event to a message
+        fn event_to_message(event: TaskEvent) -> Option<NeoMessage> {
             event.event_body.and_then(|body| {
                 match body.body_type.as_str() {
                     "user_message" => Some(NeoMessage {
@@ -629,8 +614,14 @@ impl PulumiClient {
                         tool_name: body.name,
                     }),
                     "tool_response" => {
+                        // Check if this is an error response
+                        let is_error = body.is_error;
+
                         // Parse the content which might be JSON
-                        let display_content = if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body.content) {
+                        let display_content = if is_error {
+                            // For errors, show the full error message (don't truncate)
+                            body.content.clone()
+                        } else if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body.content) {
                             if let Some(result) = json.get("result") {
                                 // Truncate long results
                                 let result_str = result.to_string();
@@ -648,7 +639,7 @@ impl PulumiClient {
                         Some(NeoMessage {
                             role: "tool_result".to_string(),
                             content: display_content,
-                            message_type: NeoMessageType::ToolResponse,
+                            message_type: if is_error { NeoMessageType::ToolError } else { NeoMessageType::ToolResponse },
                             timestamp: body.timestamp,
                             tool_calls: vec![],
                             tool_name: body.name,
@@ -673,13 +664,59 @@ impl PulumiClient {
                     _ => None,
                 }
             })
-        }).collect();
+        }
+
+        // Paginate through all events
+        let mut all_messages: Vec<NeoMessage> = Vec::new();
+        let mut continuation_token: Option<String> = None;
+        let max_pages = 10; // Safety limit to prevent infinite loops
+
+        for _ in 0..max_pages {
+            let url = if let Some(ref token) = continuation_token {
+                format!(
+                    "{}/api/preview/agents/{}/tasks/{}/events?pageSize=100&continuationToken={}",
+                    self.config.base_url, org, task_id, token
+                )
+            } else {
+                format!(
+                    "{}/api/preview/agents/{}/tasks/{}/events?pageSize=100",
+                    self.config.base_url, org, task_id
+                )
+            };
+
+            let response = self.client.get(&url).send().await?;
+
+            if !response.status().is_success() {
+                let status = response.status().as_u16();
+                let message = response.text().await.unwrap_or_default();
+                return Err(ApiError::ApiResponse { status, message });
+            }
+
+            let data: EventsResponse = response.json().await.unwrap_or(EventsResponse {
+                events: vec![],
+                continuation_token: None,
+            });
+
+            // Convert events to messages
+            let page_messages: Vec<NeoMessage> = data.events
+                .into_iter()
+                .filter_map(event_to_message)
+                .collect();
+
+            all_messages.extend(page_messages);
+
+            // Check if there are more pages
+            if data.continuation_token.is_none() {
+                break;
+            }
+            continuation_token = data.continuation_token;
+        }
 
         Ok(NeoTaskResponse {
             task_id: task_id.to_string(),
             status: None,
-            messages,
-            has_more: data.continuation_token.is_some(),
+            messages: all_messages,
+            has_more: false, // We've fetched all pages
             requires_approval: false,
         })
     }

@@ -209,9 +209,12 @@ The NEO chat uses async polling to fetch agent responses:
 - **Active polling** (after sending message): Every 500ms (5 ticks at 100ms tick rate)
 - **Background polling** (when viewing NEO tab): Every 3 seconds (30 ticks)
 - **Immediate poll**: Triggered right after task creation
+- **Task status aware**: Polls fetch both events AND task status in parallel
 - **Stop conditions** for active polling:
-  - 10 consecutive stable polls (~5 seconds) with no new messages AND has assistant response
+  - Task status is NOT "running"/"in_progress"/"pending" AND has assistant response
   - OR max 60 polls (~30 seconds timeout)
+  - OR 20+ stable polls AND task is not running (fallback)
+- **Thinking indicator**: Stays visible as long as task status is "running"
 
 ### Key State Variables (in `App`)
 - `neo_polling: bool` - Whether actively polling for responses (fast polling after sending)

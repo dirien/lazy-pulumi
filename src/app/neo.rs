@@ -55,7 +55,7 @@ impl App {
                     self.neo_polling = true;
                     self.neo_poll_counter = 5; // Trigger immediate poll on next tick
                 }
-                NeoAsyncResult::EventsReceived { messages, has_more: _ } => {
+                NeoAsyncResult::EventsReceived { messages, has_more: _, task_status } => {
                     let current_count = messages.len();
 
                     // Only update if we got messages from the API
@@ -85,6 +85,15 @@ impl App {
                     self.neo_current_poll += 1;
                     self.neo_prev_message_count = current_count;
 
+                    // Check task status - is NEO still working?
+                    let task_is_running = task_status
+                        .as_ref()
+                        .map(|s| {
+                            let s_lower = s.to_lowercase();
+                            s_lower == "running" || s_lower == "in_progress" || s_lower == "pending"
+                        })
+                        .unwrap_or(false);
+
                     // Check for assistant response
                     let has_assistant_response =
                         self.state.neo_messages.iter().any(|m| {
@@ -92,11 +101,19 @@ impl App {
                         });
 
                     // Stop polling if:
-                    // 1. We've had 10+ consecutive stable polls (no new messages for ~5 seconds)
+                    // 1. Task status is NOT running/in_progress (i.e., idle, completed, failed)
                     //    AND we have at least one assistant message
-                    // 2. OR we've hit max polls
-                    let should_stop = (self.neo_stable_polls >= 10 && has_assistant_response)
-                        || self.neo_current_poll >= self.neo_max_polls;
+                    // 2. OR we've hit max polls (safety timeout)
+                    // 3. OR stable polls exceeded AND task is not running (fallback for API issues)
+                    let should_stop = (!task_is_running && has_assistant_response)
+                        || self.neo_current_poll >= self.neo_max_polls
+                        || (self.neo_stable_polls >= 20 && !task_is_running);
+
+                    tracing::debug!(
+                        "Neo poll: status={:?}, running={}, stable={}, poll={}/{}, stop={}",
+                        task_status, task_is_running, self.neo_stable_polls,
+                        self.neo_current_poll, self.neo_max_polls, should_stop
+                    );
 
                     if should_stop {
                         self.neo_polling = false;
@@ -120,7 +137,7 @@ impl App {
         }
     }
 
-    /// Spawn async task to poll Neo events
+    /// Spawn async task to poll Neo events and task status
     pub(super) fn spawn_neo_poll(&self) {
         if let (Some(task_id), Some(org)) =
             (&self.state.current_task_id, &self.state.organization)
@@ -132,12 +149,24 @@ impl App {
                 let tx = self.neo_result_tx.clone();
 
                 tokio::spawn(async move {
-                    match client.get_neo_task_events(&org, &task_id).await {
+                    // Fetch both events and task status in parallel
+                    let (events_result, task_result) = tokio::join!(
+                        client.get_neo_task_events(&org, &task_id),
+                        client.get_neo_task(&org, &task_id)
+                    );
+
+                    // Extract task status (if available)
+                    let task_status = task_result
+                        .ok()
+                        .and_then(|task| task.status);
+
+                    match events_result {
                         Ok(response) => {
                             let _ = tx
                                 .send(NeoAsyncResult::EventsReceived {
                                     messages: response.messages,
                                     has_more: response.has_more,
+                                    task_status,
                                 })
                                 .await;
                         }
