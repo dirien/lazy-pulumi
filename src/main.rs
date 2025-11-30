@@ -7,6 +7,7 @@ mod api;
 mod app;
 mod components;
 mod event;
+mod logging;
 mod theme;
 mod tui;
 mod ui;
@@ -19,14 +20,8 @@ async fn main() -> Result<()> {
     // Initialize error handling
     color_eyre::install()?;
 
-    // Initialize tracing for debugging (optional)
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive(tracing::Level::INFO.into()),
-        )
-        .with_target(false)
-        .init();
+    // Initialize tracing to file (so it doesn't interfere with TUI)
+    logging::init_file_logging()?;
 
     // Create and run the application
     let mut app = App::new().await?;

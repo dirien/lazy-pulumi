@@ -6,6 +6,7 @@ mod dashboard;
 mod esc;
 mod header;
 mod help;
+mod logs;
 mod neo;
 mod stacks;
 
@@ -13,6 +14,7 @@ pub use dashboard::render_dashboard;
 pub use esc::render_esc_view;
 pub use header::render_header;
 pub use help::render_help;
+pub use logs::render_logs;
 pub use neo::render_neo_view;
 pub use stacks::render_stacks_view;
 

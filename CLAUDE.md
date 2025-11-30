@@ -21,6 +21,31 @@ cargo check
 RUST_LOG=debug cargo run --release
 ```
 
+## Logging
+
+Logs are written to a file instead of stdout to avoid interfering with the TUI:
+- **Log file location**: `~/.cache/lazy-pulumi/app.log`
+- Press `l` globally to open the log viewer popup
+- Logs are color-coded by level (ERROR=red, WARN=yellow, INFO=blue, DEBUG=muted)
+
+### Log Viewer Key Bindings
+| Key | Action |
+|-----|--------|
+| `l` or `Esc` | Close logs |
+| `w` | Toggle word wrap on/off |
+| `j` / `↓` | Scroll down 3 lines |
+| `k` / `↑` | Scroll up 3 lines |
+| `J` / `PageDown` | Scroll down by page |
+| `K` / `PageUp` | Scroll up by page |
+| `g` | Jump to top |
+| `G` | Jump to bottom |
+| `R` | Refresh logs |
+
+### Implementation
+- `src/logging.rs` - File-based logging initialization and log reading
+- `src/ui/logs.rs` - Log viewer popup rendering with word wrap support
+- Logs are cached when viewer opens; press `R` to reload from file
+
 ## Required Environment Variables
 
 ```bash
