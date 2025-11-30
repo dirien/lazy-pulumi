@@ -86,6 +86,7 @@ curl -s -H "Content-Type: application/json" \
 
 The NEO AI agent uses the Preview Agents API:
 - **List tasks**: `GET /api/preview/agents/{org}/tasks`
+- **Get task metadata**: `GET /api/preview/agents/{org}/tasks/{taskId}` - Returns single task details
 - **Create task**: `POST /api/preview/agents/{org}/tasks` with `{"message": {"type": "user_message", "content": "...", "timestamp": "..."}}`
 - **Get events**: `GET /api/preview/agents/{org}/tasks/{taskId}/events`
 - **Respond**: `POST /api/preview/agents/{org}/tasks/{taskId}` with `{"event": {"type": "user_message", "content": "...", "timestamp": "..."}}`
@@ -194,6 +195,7 @@ Assistant messages support markdown rendering:
 |-----|--------|
 | `i` | Enter input mode to type message |
 | `n` | Start new task/conversation |
+| `d` | Show task details dialog (only in full-width chat mode) |
 | `↑`/`↓` | Navigate task list (left panel) |
 | `j` | Scroll chat down 3 lines (newer) |
 | `k` | Scroll chat up 3 lines (older) + disable auto-scroll |
@@ -202,6 +204,31 @@ Assistant messages support markdown rendering:
 | `g` | Jump to top (oldest messages) + disable auto-scroll |
 | `G` | Jump to bottom + re-enable auto-scroll |
 | `Enter` | Load selected task's messages |
+| `Esc` | Show task list (exit full-width chat mode) |
+
+### Task Details Dialog
+Press `d` in full-width chat mode to show task details (similar to Pulumi Cloud web UI):
+- **Status**: Task state (idle, running, completed, failed)
+- **Started on**: Task creation timestamp
+- **Started by**: User who initiated the task
+- **Linked PRs**: Associated pull requests with state (open/merged/closed)
+- **Involved entities**: Stacks, environments, repositories linked to task
+- **Active policies**: Policy groups enforcing guardrails
+
+The dialog fetches fresh data from `GET /api/preview/agents/{org}/tasks/{taskId}` each time it opens.
+
+### Task Data Types
+```rust
+NeoTask {
+    id, name, status, created_at, updated_at, url,
+    started_by: Option<NeoTaskUser>,
+    linked_prs: Vec<NeoLinkedPR>,
+    entities: Vec<NeoEntity>,
+    policies: Vec<NeoPolicy>,
+}
+```
+
+Note: API may return `null` for array fields. Use custom deserializer `null_to_empty_vec` to handle this.
 
 ### Message Types (`NeoMessageType`)
 - `UserMessage` - User input

@@ -326,4 +326,8 @@ pub mod symbols {
     pub const DIAMOND: &str = "◆";
 
     pub const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+    // Additional icons for entity types
+    pub const STACK: &str = "📚";
+    pub const GEAR: &str = "⚙";
 }

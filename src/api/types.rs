@@ -154,6 +154,16 @@ pub struct EscOpenResponse {
     pub values: Option<serde_json::Value>,
 }
 
+/// Helper to deserialize null as empty Vec
+fn null_to_empty_vec<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::Deserialize<'de>,
+{
+    let opt: Option<Vec<T>> = Option::deserialize(deserializer)?;
+    Ok(opt.unwrap_or_default())
+}
+
 /// Neo Task
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -169,6 +179,75 @@ pub struct NeoTask {
     pub updated_at: Option<String>,
     #[serde(default)]
     pub url: Option<String>,
+    /// User who started the task
+    #[serde(default)]
+    pub started_by: Option<NeoTaskUser>,
+    /// Linked pull requests
+    #[serde(default, deserialize_with = "null_to_empty_vec")]
+    pub linked_prs: Vec<NeoLinkedPR>,
+    /// Involved entities (stacks, environments, etc.)
+    #[serde(default, deserialize_with = "null_to_empty_vec")]
+    pub entities: Vec<NeoEntity>,
+    /// Active policies
+    #[serde(default, deserialize_with = "null_to_empty_vec")]
+    pub policies: Vec<NeoPolicy>,
+}
+
+/// User who started a Neo task
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NeoTaskUser {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub login: Option<String>,
+    #[serde(default)]
+    pub avatar_url: Option<String>,
+}
+
+/// Linked Pull Request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NeoLinkedPR {
+    #[serde(default)]
+    pub number: Option<i32>,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub repository: Option<String>,
+    #[serde(default)]
+    pub state: Option<String>,
+}
+
+/// Entity involved in a Neo task
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NeoEntity {
+    #[serde(rename = "type")]
+    #[serde(default)]
+    pub entity_type: Option<String>,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub project: Option<String>,
+    #[serde(default)]
+    pub stack: Option<String>,
+    #[serde(default)]
+    pub url: Option<String>,
+}
+
+/// Policy associated with a Neo task
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NeoPolicy {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub pack_name: Option<String>,
+    #[serde(default)]
+    pub enforcement_level: Option<String>,
 }
 
 /// Neo Message type enum
