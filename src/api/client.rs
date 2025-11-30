@@ -339,7 +339,14 @@ impl PulumiClient {
                 fetched_count,
                 data.continuation_token
             );
-            all_environments.extend(data.environments);
+            // Populate organization field since API doesn't include it (implied from URL)
+            let envs_with_org: Vec<EscEnvironmentSummary> = data.environments.into_iter().map(|mut env| {
+                if env.organization.is_empty() {
+                    env.organization = org.to_string();
+                }
+                env
+            }).collect();
+            all_environments.extend(envs_with_org);
 
             match data.continuation_token {
                 Some(token) if !token.is_empty() => {
@@ -353,7 +360,8 @@ impl PulumiClient {
         Ok(all_environments)
     }
 
-    /// Get ESC environment details
+    /// Get ESC environment details (YAML definition)
+    /// The API returns the YAML content directly as a string
     pub async fn get_esc_environment(
         &self,
         org: &str,
@@ -365,6 +373,7 @@ impl PulumiClient {
             self.config.base_url, org, project, env
         );
 
+        tracing::debug!("GET ESC environment: {}", url);
         let response = self.client.get(&url).send().await?;
 
         if !response.status().is_success() {
@@ -373,22 +382,37 @@ impl PulumiClient {
             return Err(ApiError::ApiResponse { status, message });
         }
 
-        response.json().await.map_err(ApiError::Http)
+        let text = response.text().await?;
+        tracing::debug!("ESC environment details response: {}", &text[..text.len().min(500)]);
+
+        // The API returns YAML content directly as text, not JSON
+        // So we just return it as the yaml field
+        Ok(EscEnvironmentDetails {
+            yaml: Some(text),
+            definition: None,
+            created: None,
+            modified: None,
+            revision: None,
+            extra: std::collections::HashMap::new(),
+        })
     }
 
     /// Open an ESC environment to get resolved values
+    /// This is a two-step process: first open the session, then read the values
     pub async fn open_esc_environment(
         &self,
         org: &str,
         project: &str,
         env: &str,
     ) -> Result<EscOpenResponse, ApiError> {
-        let url = format!(
+        // Step 1: Open the environment session
+        let open_url = format!(
             "{}/api/esc/environments/{}/{}/{}/open",
             self.config.base_url, org, project, env
         );
 
-        let response = self.client.post(&url).send().await?;
+        tracing::debug!("POST ESC environment open: {}", open_url);
+        let response = self.client.post(&open_url).send().await?;
 
         if !response.status().is_success() {
             let status = response.status().as_u16();
@@ -396,7 +420,122 @@ impl PulumiClient {
             return Err(ApiError::ApiResponse { status, message });
         }
 
-        response.json().await.map_err(ApiError::Http)
+        // Parse the open response to get the session ID
+        // Note: diagnostics can be an array of objects like:
+        // {"diagnostics":[{"range":...,"summary":"no matching item","path":"values.stackRefs"}]}
+        #[derive(serde::Deserialize, Debug)]
+        struct DiagnosticItem {
+            #[serde(default)]
+            summary: Option<String>,
+            #[serde(default)]
+            path: Option<String>,
+        }
+
+        #[derive(serde::Deserialize, Debug)]
+        struct OpenSessionResponse {
+            #[serde(default)]
+            id: Option<serde_json::Value>, // Can be number, string, or missing if error
+            #[serde(default)]
+            diagnostics: Option<Vec<DiagnosticItem>>,
+        }
+
+        let text = response.text().await?;
+        tracing::debug!("ESC environment open response: {}", &text[..text.len().min(500)]);
+
+        let open_response: OpenSessionResponse = serde_json::from_str(&text).map_err(|e| {
+            tracing::error!("Failed to parse ESC open response: {}. Response: {}", e, &text[..text.len().min(1000)]);
+            ApiError::Parse(format!("Failed to parse open response: {}", e))
+        })?;
+
+        // Check for diagnostics errors (environment has configuration issues)
+        if let Some(diagnostics) = &open_response.diagnostics {
+            if !diagnostics.is_empty() {
+                let error_messages: Vec<String> = diagnostics
+                    .iter()
+                    .filter_map(|d| {
+                        let summary = d.summary.as_deref().unwrap_or("Unknown error");
+                        let path = d.path.as_deref().map(|p| format!(" at {}", p)).unwrap_or_default();
+                        Some(format!("{}{}", summary, path))
+                    })
+                    .collect();
+                let combined = error_messages.join("; ");
+                tracing::warn!("ESC environment has diagnostics: {}", combined);
+                return Err(ApiError::Parse(format!("Environment error: {}", combined)));
+            }
+        }
+
+        // Convert session ID to string (it can be returned as number or string)
+        let session_id = match open_response.id {
+            Some(serde_json::Value::Number(n)) => n.to_string(),
+            Some(serde_json::Value::String(s)) => s,
+            _ => return Err(ApiError::Parse("No session ID returned - environment may have errors".to_string())),
+        };
+
+        tracing::debug!("ESC environment session opened: id={}", session_id);
+
+        // Step 2: Read the resolved values from the open session
+        let read_url = format!(
+            "{}/api/esc/environments/{}/{}/{}/open/{}",
+            self.config.base_url, org, project, env, session_id
+        );
+
+        tracing::debug!("GET ESC environment open values: {}", read_url);
+        let values_response = self.client.get(&read_url).send().await?;
+
+        if !values_response.status().is_success() {
+            let status = values_response.status().as_u16();
+            let message = values_response.text().await.unwrap_or_default();
+            return Err(ApiError::ApiResponse { status, message });
+        }
+
+        let values_text = values_response.text().await?;
+        tracing::debug!("ESC environment values response: {}", &values_text[..values_text.len().min(500)]);
+
+        // Parse the values as JSON
+        let values: serde_json::Value = serde_json::from_str(&values_text).map_err(|e| {
+            tracing::error!("Failed to parse ESC values: {}. Response: {}", e, &values_text[..values_text.len().min(1000)]);
+            ApiError::Parse(format!("Failed to parse values: {}", e))
+        })?;
+
+        Ok(EscOpenResponse {
+            id: Some(session_id),
+            properties: None,
+            values: Some(values),
+        })
+    }
+
+    /// Update an ESC environment definition (YAML content)
+    pub async fn update_esc_environment(
+        &self,
+        org: &str,
+        project: &str,
+        env: &str,
+        yaml_content: &str,
+    ) -> Result<(), ApiError> {
+        let url = format!(
+            "{}/api/esc/environments/{}/{}/{}",
+            self.config.base_url, org, project, env
+        );
+
+        tracing::debug!("PATCH ESC environment: {}", url);
+
+        let response = self
+            .client
+            .patch(&url)
+            .header("Content-Type", "application/x-yaml")
+            .body(yaml_content.to_string())
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let message = response.text().await.unwrap_or_default();
+            tracing::error!("ESC environment update error: {} - {}", status, message);
+            return Err(ApiError::ApiResponse { status, message });
+        }
+
+        tracing::info!("ESC environment updated successfully: {}/{}/{}", org, project, env);
+        Ok(())
     }
 
     // ─────────────────────────────────────────────────────────────

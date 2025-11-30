@@ -58,8 +58,14 @@ pub fn render_help(frame: &mut Frame, theme: &Theme) {
         (
             "Environment View",
             vec![
+                ("↑/↓", "Navigate environment list"),
+                ("←/→ or h/l", "Switch focus: Definition / Values"),
+                ("j/k", "Scroll focused pane"),
+                ("J/K", "Page scroll focused pane"),
                 ("Enter", "Load environment definition"),
                 ("o", "Open & resolve environment values"),
+                ("e", "Edit environment YAML"),
+                ("O", "Select organization (in this tab)"),
             ],
         ),
         (

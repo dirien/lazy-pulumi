@@ -11,7 +11,7 @@ mod handlers;
 mod neo;
 mod types;
 
-pub use types::{AppState, DataLoadResult, FocusMode, NeoAsyncResult, PlatformView, Tab};
+pub use types::{AppState, DataLoadResult, EscPane, FocusMode, NeoAsyncResult, PlatformView, Tab};
 
 use color_eyre::Result;
 use std::sync::atomic::AtomicBool;
@@ -24,7 +24,7 @@ use crate::api::{
     EscEnvironmentSummary, NeoTask, PulumiClient, RegistryPackage, RegistryTemplate, Service,
     Stack,
 };
-use crate::components::{Spinner, StatefulList, TextInput};
+use crate::components::{Spinner, StatefulList, TextEditor, TextInput};
 use crate::config::Config;
 use crate::event::{Event, EventHandler};
 use crate::startup::{check_pulumi_cli, check_pulumi_token, StartupChecks};
@@ -108,6 +108,20 @@ pub struct App {
     pub(super) esc_list: StatefulList<EscEnvironmentSummary>,
     pub(super) neo_tasks_list: StatefulList<NeoTask>,
     pub(super) neo_input: TextInput,
+
+    // ESC detail pane state
+    /// Which pane is currently focused (Definition or Resolved Values)
+    pub(super) esc_pane: types::EscPane,
+    /// Scroll state for Definition pane
+    pub(super) esc_definition_scroll: ScrollViewState,
+    /// Scroll state for Resolved Values pane
+    pub(super) esc_values_scroll: ScrollViewState,
+    /// Show YAML editor dialog
+    pub(super) show_esc_editor: bool,
+    /// YAML editor component
+    pub(super) esc_editor: TextEditor,
+    /// Environment being edited (org, project, name)
+    pub(super) esc_editing_env: Option<(String, String, String)>,
 
     // Platform UI state
     pub(super) platform_view: PlatformView,
@@ -220,6 +234,12 @@ impl App {
             esc_list: StatefulList::new(),
             neo_tasks_list: StatefulList::new(),
             neo_input: TextInput::new(),
+            esc_pane: types::EscPane::default(),
+            esc_definition_scroll: ScrollViewState::default(),
+            esc_values_scroll: ScrollViewState::default(),
+            show_esc_editor: false,
+            esc_editor: TextEditor::new(),
+            esc_editing_env: None,
             platform_view: PlatformView::Services,
             services_list: StatefulList::new(),
             packages_list: StatefulList::new(),
@@ -339,6 +359,9 @@ impl App {
         let show_org_selector = self.show_org_selector;
         let show_logs = self.show_logs;
         let show_neo_details = self.show_neo_details;
+        let show_esc_editor = self.show_esc_editor;
+        let esc_editor = &self.esc_editor;
+        let esc_editing_env = self.esc_editing_env.clone();
         let logs_scroll_offset = self.logs_scroll_offset;
         let logs_word_wrap = self.logs_word_wrap;
         let logs_cache = &self.logs_cache;
@@ -363,6 +386,11 @@ impl App {
         let neo_scroll_state = &mut self.neo_scroll_state;
         let neo_auto_scroll = self.neo_auto_scroll.clone();
         let neo_hide_task_list = self.neo_hide_task_list;
+
+        // ESC detail pane state
+        let esc_pane = self.esc_pane;
+        let esc_definition_scroll = &mut self.esc_definition_scroll;
+        let esc_values_scroll = &mut self.esc_values_scroll;
 
         // Platform state
         let platform_view = self.platform_view;
@@ -424,6 +452,9 @@ impl App {
                         esc_list,
                         state.selected_env_yaml.as_deref(),
                         state.selected_env_values.as_ref(),
+                        esc_pane,
+                        esc_definition_scroll,
+                        esc_values_scroll,
                     );
                 }
                 Tab::Neo => {
@@ -480,6 +511,15 @@ impl App {
                 }
             }
 
+            // ESC YAML editor popup
+            if show_esc_editor {
+                let env_name = esc_editing_env
+                    .as_ref()
+                    .map(|(_, p, n)| format!("{}/{}", p, n))
+                    .unwrap_or_else(|| "Unknown".to_string());
+                ui::render_esc_editor(frame, theme, esc_editor, &env_name);
+            }
+
             // Error popup
             if let Some(ref error) = error_msg {
                 ui::render_error_popup(frame, theme, error);
@@ -502,6 +542,11 @@ impl App {
 
         if self.show_neo_details {
             return "Press d or Esc to close details".to_string();
+        }
+
+        if self.show_esc_editor {
+            return "Esc: Save & Close | Ctrl+C: Cancel | Tab: Indent | Ctrl+D: Delete line"
+                .to_string();
         }
 
         if self.show_logs {
@@ -528,7 +573,7 @@ impl App {
                         .to_string()
                 }
                 Tab::Esc => {
-                    "↑↓: navigate | o: org | l: logs | Enter: load | O: resolve | q: quit"
+                    "↑↓: envs | ←→: panes | j/k: scroll | Enter: load | o: resolve | e: edit | q: quit"
                         .to_string()
                 }
                 Tab::Neo => {

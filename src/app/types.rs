@@ -118,6 +118,23 @@ pub enum FocusMode {
     Input,
 }
 
+/// ESC detail pane selection (which content pane is focused)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum EscPane {
+    #[default]
+    Definition,
+    ResolvedValues,
+}
+
+impl EscPane {
+    pub fn toggle(&self) -> Self {
+        match self {
+            EscPane::Definition => EscPane::ResolvedValues,
+            EscPane::ResolvedValues => EscPane::Definition,
+        }
+    }
+}
+
 /// Platform sub-view selection
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlatformView {

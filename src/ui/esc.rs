@@ -4,10 +4,12 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     prelude::*,
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph},
+    widgets::{Block, Borders, List, ListItem, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState},
 };
+use tui_scrollview::{ScrollView, ScrollViewState};
 
 use crate::api::EscEnvironmentSummary;
+use crate::app::EscPane;
 use crate::components::StatefulList;
 use crate::theme::{symbols, Theme};
 
@@ -19,6 +21,9 @@ pub fn render_esc_view(
     environments: &mut StatefulList<EscEnvironmentSummary>,
     selected_env_yaml: Option<&str>,
     selected_env_values: Option<&serde_json::Value>,
+    focused_pane: EscPane,
+    definition_scroll: &mut ScrollViewState,
+    values_scroll: &mut ScrollViewState,
 ) {
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
@@ -26,7 +31,17 @@ pub fn render_esc_view(
         .split(area);
 
     render_environments_list(frame, theme, chunks[0], environments);
-    render_environment_details(frame, theme, chunks[1], environments.selected(), selected_env_yaml, selected_env_values);
+    render_environment_details(
+        frame,
+        theme,
+        chunks[1],
+        environments.selected(),
+        selected_env_yaml,
+        selected_env_values,
+        focused_pane,
+        definition_scroll,
+        values_scroll,
+    );
 }
 
 fn render_environments_list(
@@ -88,6 +103,212 @@ fn render_environments_list(
     frame.render_stateful_widget(list, area, &mut environments.state);
 }
 
+/// Extract only the actual values from the ESC resolved values response,
+/// filtering out metadata like executionContext, schema, exprs, and trace info.
+///
+/// The API response structure is:
+/// {
+///   "exprs": { ... },           // Expression definitions - skip
+///   "properties": {             // Contains the actual values we want
+///     "pulumiConfig": { "value": { "key": { "value": "actual_value", "trace": ... } } },
+///     "myValues": { "value": { ... } }
+///   },
+///   "schema": { ... },          // JSON schema - skip
+///   "executionContext": { ... } // Metadata - skip
+/// }
+fn extract_values(values: &serde_json::Value) -> serde_json::Value {
+    if let Some(obj) = values.as_object() {
+        // If there's a "properties" key, extract values from it
+        // This is the main structure returned by the ESC open API
+        if let Some(properties) = obj.get("properties") {
+            if let Some(prop_obj) = properties.as_object() {
+                let mut result = serde_json::Map::new();
+                for (key, val) in prop_obj {
+                    // Skip executionContext metadata
+                    if key == "executionContext" {
+                        continue;
+                    }
+                    // Extract the actual value, recursively processing nested structures
+                    result.insert(key.clone(), extract_property_value(val));
+                }
+                if !result.is_empty() {
+                    return serde_json::Value::Object(result);
+                }
+            }
+        }
+
+        // If there's a "values" key, use that (some API responses use this)
+        if let Some(inner_values) = obj.get("values") {
+            return filter_trace_info(inner_values);
+        }
+
+        // Fallback: filter out known metadata keys from top level
+        let mut result = serde_json::Map::new();
+        for (key, val) in obj {
+            // Skip all metadata keys
+            if key == "executionContext" || key == "schema" || key == "exprs" {
+                continue;
+            }
+            result.insert(key.clone(), filter_trace_info(val));
+        }
+        return serde_json::Value::Object(result);
+    }
+
+    filter_trace_info(values)
+}
+
+/// Extract the actual value from a property wrapper.
+/// Properties are structured as: { "value": <actual_value>, "trace": { ... }, "secret": bool }
+/// The actual_value can itself be an object with nested properties.
+fn extract_property_value(prop: &serde_json::Value) -> serde_json::Value {
+    if let Some(obj) = prop.as_object() {
+        // Check if this is a property wrapper with "value" key
+        if let Some(inner_value) = obj.get("value") {
+            // Recursively process the inner value (secrets are shown as-is)
+            return extract_property_value(inner_value);
+        }
+
+        // It's a regular object, process each key
+        let mut result = serde_json::Map::new();
+        for (key, val) in obj {
+            // Skip trace info
+            if key == "trace" || key == "secret" {
+                continue;
+            }
+            result.insert(key.clone(), extract_property_value(val));
+        }
+        return serde_json::Value::Object(result);
+    }
+
+    // For arrays, process each element
+    if let Some(arr) = prop.as_array() {
+        return serde_json::Value::Array(
+            arr.iter().map(extract_property_value).collect()
+        );
+    }
+
+    // For primitives, return as-is
+    prop.clone()
+}
+
+/// Recursively filter out trace information from values
+fn filter_trace_info(value: &serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Object(obj) => {
+            let mut result = serde_json::Map::new();
+            for (key, val) in obj {
+                // Skip trace-related keys
+                if key == "trace" || key == "def" || key == "begin" || key == "end"
+                   || key == "byte" || key == "column" || key == "line" || key == "environment" {
+                    continue;
+                }
+                // If this is a "value" wrapper with trace, extract just the value
+                if key == "value" && obj.contains_key("trace") {
+                    return filter_trace_info(val);
+                }
+                // For "name" objects that have nested value structure
+                if let Some(inner_obj) = val.as_object() {
+                    if inner_obj.contains_key("value") && inner_obj.contains_key("trace") {
+                        if let Some(inner_value) = inner_obj.get("value") {
+                            result.insert(key.clone(), filter_trace_info(inner_value));
+                            continue;
+                        }
+                    }
+                }
+                result.insert(key.clone(), filter_trace_info(val));
+            }
+            serde_json::Value::Object(result)
+        }
+        serde_json::Value::Array(arr) => {
+            serde_json::Value::Array(arr.iter().map(filter_trace_info).collect())
+        }
+        _ => value.clone(),
+    }
+}
+
+/// Convert JSON value to YAML string
+fn json_to_yaml(value: &serde_json::Value) -> String {
+    // Use serde_yaml if available, otherwise format manually
+    match serde_json::to_value(value) {
+        Ok(v) => format_as_yaml(&v, 0),
+        Err(_) => "Error converting to YAML".to_string(),
+    }
+}
+
+/// Format a JSON value as YAML-like string
+fn format_as_yaml(value: &serde_json::Value, indent: usize) -> String {
+    let indent_str = "  ".repeat(indent);
+    match value {
+        serde_json::Value::Object(obj) => {
+            if obj.is_empty() {
+                return "{}".to_string();
+            }
+            let mut lines = Vec::new();
+            for (key, val) in obj {
+                match val {
+                    serde_json::Value::Object(_) | serde_json::Value::Array(_) => {
+                        let nested = format_as_yaml(val, indent + 1);
+                        if nested.starts_with('{') || nested.starts_with('[') {
+                            lines.push(format!("{}{}: {}", indent_str, key, nested));
+                        } else {
+                            lines.push(format!("{}{}:", indent_str, key));
+                            lines.push(nested);
+                        }
+                    }
+                    _ => {
+                        lines.push(format!("{}{}: {}", indent_str, key, format_scalar(val)));
+                    }
+                }
+            }
+            lines.join("\n")
+        }
+        serde_json::Value::Array(arr) => {
+            if arr.is_empty() {
+                return "[]".to_string();
+            }
+            let mut lines = Vec::new();
+            for item in arr {
+                match item {
+                    serde_json::Value::Object(_) | serde_json::Value::Array(_) => {
+                        let nested = format_as_yaml(item, indent + 1);
+                        lines.push(format!("{}- ", indent_str));
+                        lines.push(nested);
+                    }
+                    _ => {
+                        lines.push(format!("{}- {}", indent_str, format_scalar(item)));
+                    }
+                }
+            }
+            lines.join("\n")
+        }
+        _ => format!("{}{}", indent_str, format_scalar(value)),
+    }
+}
+
+/// Format a scalar JSON value for YAML output
+fn format_scalar(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::Null => "null".to_string(),
+        serde_json::Value::Bool(b) => b.to_string(),
+        serde_json::Value::Number(n) => n.to_string(),
+        serde_json::Value::String(s) => {
+            // Check if string needs quoting (contains special chars or looks like a number)
+            if s.contains(':') || s.contains('#') || s.contains('\n')
+               || s.starts_with(' ') || s.ends_with(' ')
+               || s == "true" || s == "false" || s == "null"
+               || s.parse::<f64>().is_ok() {
+                format!("\"{}\"", s.replace('"', "\\\""))
+            } else if s.is_empty() {
+                "\"\"".to_string()
+            } else {
+                s.clone()
+            }
+        }
+        _ => value.to_string(),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn render_environment_details(
     frame: &mut Frame,
     theme: &Theme,
@@ -95,6 +316,9 @@ fn render_environment_details(
     selected: Option<&EscEnvironmentSummary>,
     yaml: Option<&str>,
     values: Option<&serde_json::Value>,
+    focused_pane: EscPane,
+    definition_scroll: &mut ScrollViewState,
+    values_scroll: &mut ScrollViewState,
 ) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -159,64 +383,266 @@ fn render_environment_details(
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(chunks[1]);
 
-    // YAML definition
-    let yaml_block = Block::default()
+    // YAML definition pane
+    let is_definition_focused = focused_pane == EscPane::Definition;
+    render_scrollable_pane(
+        frame,
+        theme,
+        content_chunks[0],
+        " Definition (YAML) ",
+        yaml.map(|s| s.to_string()),
+        is_definition_focused,
+        definition_scroll,
+        if selected.is_some() { "Press Enter to load definition" } else { "Select an environment" },
+    );
+
+    // Resolved values pane
+    let is_values_focused = focused_pane == EscPane::ResolvedValues;
+    let values_content = values.map(|v| {
+        let filtered = extract_values(v);
+        json_to_yaml(&filtered)
+    });
+    render_scrollable_pane(
+        frame,
+        theme,
+        content_chunks[1],
+        " Resolved Values ",
+        values_content,
+        is_values_focused,
+        values_scroll,
+        if selected.is_some() { "Press 'o' to open & resolve" } else { "Select an environment" },
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_scrollable_pane(
+    frame: &mut Frame,
+    theme: &Theme,
+    area: Rect,
+    title: &str,
+    content: Option<String>,
+    is_focused: bool,
+    scroll_state: &mut ScrollViewState,
+    hint: &str,
+) {
+    render_scrollable_pane_with_highlight(frame, theme, area, title, content, is_focused, scroll_state, hint, true)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_scrollable_pane_with_highlight(
+    frame: &mut Frame,
+    theme: &Theme,
+    area: Rect,
+    title: &str,
+    content: Option<String>,
+    is_focused: bool,
+    scroll_state: &mut ScrollViewState,
+    hint: &str,
+    use_syntax_highlight: bool,
+) {
+    use super::syntax::highlight_yaml;
+    use ratatui::text::Text;
+
+    let border_style = if is_focused {
+        theme.border_focused()
+    } else {
+        theme.border()
+    };
+
+    let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(theme.border())
-        .title(" Definition (YAML) ")
-        .title_style(theme.subtitle());
+        .border_style(border_style)
+        .title(title)
+        .title_style(if is_focused { theme.title() } else { theme.subtitle() });
 
-    let yaml_inner = yaml_block.inner(content_chunks[0]);
-    frame.render_widget(yaml_block, content_chunks[0]);
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
 
-    match yaml {
-        Some(y) => {
-            let yaml_para = Paragraph::new(y)
-                .style(theme.text())
-                .wrap(ratatui::widgets::Wrap { trim: false });
-            frame.render_widget(yaml_para, yaml_inner);
+    match content {
+        Some(text) => {
+            // Get highlighted lines or plain text
+            let highlighted_lines = if use_syntax_highlight {
+                highlight_yaml(&text)
+            } else {
+                text.lines().map(|l| Line::from(l.to_string())).collect()
+            };
+
+            let content_height = highlighted_lines.len() as u16;
+            let view_height = inner.height;
+
+            // Create scrollable content
+            let mut scroll_view = ScrollView::new(Size::new(inner.width.saturating_sub(1), content_height.max(view_height)));
+
+            // Render content into scroll view with syntax highlighting
+            let content_text = Text::from(highlighted_lines);
+            let content_para = Paragraph::new(content_text);
+            scroll_view.render_widget(content_para, Rect::new(0, 0, inner.width.saturating_sub(1), content_height.max(view_height)));
+
+            // Render scroll view
+            frame.render_stateful_widget(scroll_view, inner, scroll_state);
+
+            // Render scrollbar if content exceeds view height
+            if content_height > view_height {
+                let scrollbar_area = Rect::new(
+                    inner.x + inner.width.saturating_sub(1),
+                    inner.y,
+                    1,
+                    inner.height,
+                );
+
+                let scroll_position = scroll_state.offset().y as usize;
+                let mut scrollbar_state = ScrollbarState::new(content_height.saturating_sub(view_height) as usize)
+                    .position(scroll_position);
+
+                let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                    .begin_symbol(Some("▲"))
+                    .end_symbol(Some("▼"))
+                    .track_symbol(Some("│"))
+                    .thumb_symbol("█");
+
+                frame.render_stateful_widget(scrollbar, scrollbar_area, &mut scrollbar_state);
+            }
         }
         None => {
-            let hint = if selected.is_some() {
-                "Press Enter to load definition"
-            } else {
-                "Select an environment"
-            };
             let empty = Paragraph::new(hint)
                 .style(theme.text_muted())
                 .alignment(Alignment::Center);
-            frame.render_widget(empty, yaml_inner);
+            frame.render_widget(empty, inner);
         }
     }
+}
 
-    // Resolved values
-    let values_block = Block::default()
+/// Render the YAML editor dialog
+pub fn render_esc_editor(
+    frame: &mut Frame,
+    theme: &Theme,
+    editor: &crate::components::TextEditor,
+    env_name: &str,
+) {
+    use super::syntax::highlight_yaml;
+    use ratatui::text::Text;
+    use ratatui::widgets::Clear;
+
+    // Create a large centered dialog (90% width, 85% height)
+    let area = frame.area();
+    let dialog_width = (area.width as f32 * 0.9) as u16;
+    let dialog_height = (area.height as f32 * 0.85) as u16;
+    let dialog_x = (area.width.saturating_sub(dialog_width)) / 2;
+    let dialog_y = (area.height.saturating_sub(dialog_height)) / 2;
+    let dialog_area = Rect::new(dialog_x, dialog_y, dialog_width, dialog_height);
+
+    // Clear background
+    frame.render_widget(Clear, dialog_area);
+
+    // Main block with title and instructions
+    let modified_indicator = if editor.is_modified() { " [modified]" } else { "" };
+    let title = format!(" Edit: {} {}", env_name, modified_indicator);
+
+    let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(theme.border())
-        .title(" Resolved Values ")
-        .title_style(theme.subtitle());
+        .border_style(theme.border_focused())
+        .title(title)
+        .title_style(theme.title())
+        .title_bottom(Line::from(vec![
+            Span::styled(" Esc", theme.key_hint()),
+            Span::styled(": Save & Close | ", theme.key_desc()),
+            Span::styled("Ctrl+C", theme.key_hint()),
+            Span::styled(": Cancel | ", theme.key_desc()),
+            Span::styled("Tab", theme.key_hint()),
+            Span::styled(": Indent | ", theme.key_desc()),
+            Span::styled("Ctrl+D", theme.key_hint()),
+            Span::styled(": Delete line ", theme.key_desc()),
+        ]));
 
-    let values_inner = values_block.inner(content_chunks[1]);
-    frame.render_widget(values_block, content_chunks[1]);
+    let inner = block.inner(dialog_area);
+    frame.render_widget(block, dialog_area);
 
-    match values {
-        Some(v) => {
-            let formatted = serde_json::to_string_pretty(v).unwrap_or_else(|_| "Error".to_string());
-            let values_para = Paragraph::new(formatted)
-                .style(theme.text())
-                .wrap(ratatui::widgets::Wrap { trim: false });
-            frame.render_widget(values_para, values_inner);
-        }
-        None => {
-            let hint = if selected.is_some() {
-                "Press 'o' to open & resolve"
+    // Split inner area: line numbers | editor content | scrollbar
+    let line_number_width = 4u16; // "999 " format
+    let editor_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Length(line_number_width),
+            Constraint::Min(10),
+            Constraint::Length(1), // scrollbar
+        ])
+        .split(inner);
+
+    let line_num_area = editor_chunks[0];
+    let editor_area = editor_chunks[1];
+    let scrollbar_area = editor_chunks[2];
+
+    let visible_height = editor_area.height as usize;
+    let scroll_offset = editor.scroll_offset();
+    let (cursor_row, cursor_col) = editor.cursor();
+    let lines = editor.lines();
+    let total_lines = lines.len();
+
+    // Render line numbers
+    let line_numbers: Vec<Line> = (scroll_offset..scroll_offset + visible_height)
+        .map(|i| {
+            if i < total_lines {
+                let style = if i == cursor_row {
+                    theme.highlight()
+                } else {
+                    theme.text_muted()
+                };
+                Line::from(Span::styled(format!("{:>3} ", i + 1), style))
             } else {
-                "Select an environment"
-            };
-            let empty = Paragraph::new(hint)
-                .style(theme.text_muted())
-                .alignment(Alignment::Center);
-            frame.render_widget(empty, values_inner);
+                Line::from(Span::styled("    ", theme.text_muted()))
+            }
+        })
+        .collect();
+
+    let line_num_para = Paragraph::new(line_numbers);
+    frame.render_widget(line_num_para, line_num_area);
+
+    // Render editor content with syntax highlighting
+    let visible_lines: Vec<&str> = lines
+        .iter()
+        .skip(scroll_offset)
+        .take(visible_height)
+        .map(|s| s.as_str())
+        .collect();
+
+    // Join visible lines for syntax highlighting
+    let visible_content = visible_lines.join("\n");
+    let mut highlighted_lines = highlight_yaml(&visible_content);
+
+    // Pad to fill visible area
+    while highlighted_lines.len() < visible_height {
+        highlighted_lines.push(Line::from(""));
+    }
+
+    // Render content
+    let content_text = Text::from(highlighted_lines);
+    let content_para = Paragraph::new(content_text);
+    frame.render_widget(content_para, editor_area);
+
+    // Render cursor
+    let cursor_visible_row = cursor_row.saturating_sub(scroll_offset);
+    if cursor_visible_row < visible_height {
+        let cursor_x = editor_area.x + cursor_col as u16;
+        let cursor_y = editor_area.y + cursor_visible_row as u16;
+
+        // Make sure cursor doesn't go beyond editor area
+        if cursor_x < editor_area.x + editor_area.width {
+            frame.set_cursor_position((cursor_x, cursor_y));
         }
     }
+
+    // Render scrollbar if content exceeds view
+    if total_lines > visible_height {
+        let mut scrollbar_state = ScrollbarState::new(total_lines.saturating_sub(visible_height))
+            .position(scroll_offset);
+
+        let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(Some("▲"))
+            .end_symbol(Some("▼"))
+            .track_symbol(Some("│"))
+            .thumb_symbol("█");
+
+        frame.render_stateful_widget(scrollbar, scrollbar_area, &mut scrollbar_state);
+    }
+
 }

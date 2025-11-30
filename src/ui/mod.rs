@@ -12,9 +12,10 @@ mod neo;
 mod platform;
 mod splash;
 mod stacks;
+pub mod syntax;
 
 pub use dashboard::render_dashboard;
-pub use esc::render_esc_view;
+pub use esc::{render_esc_view, render_esc_editor};
 pub use header::render_header;
 pub use help::render_help;
 pub use logs::render_logs;
