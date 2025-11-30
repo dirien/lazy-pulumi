@@ -67,6 +67,7 @@ pub fn render_help(frame: &mut Frame, theme: &Theme) {
             vec![
                 ("n", "Start new task"),
                 ("i", "Focus input field"),
+                ("d", "Show task details"),
                 ("Enter", "Send/select task"),
                 ("Esc", "Show task list"),
                 ("j/k", "Scroll messages"),

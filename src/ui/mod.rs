@@ -18,7 +18,7 @@ pub use esc::render_esc_view;
 pub use header::render_header;
 pub use help::render_help;
 pub use logs::render_logs;
-pub use neo::render_neo_view;
+pub use neo::{render_neo_view, render_neo_details_dialog};
 pub use platform::render_platform_view;
 pub use splash::render_splash;
 pub use stacks::render_stacks_view;

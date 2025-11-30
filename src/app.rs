@@ -323,6 +323,8 @@ pub struct App {
     neo_auto_scroll: Arc<AtomicBool>,
     /// Hide task list when a task is selected (full-width chat)
     neo_hide_task_list: bool,
+    /// Show Neo task details dialog
+    show_neo_details: bool,
 
     /// Channel for receiving async Neo results
     neo_result_rx: mpsc::Receiver<NeoAsyncResult>,
@@ -442,6 +444,7 @@ impl App {
             neo_scroll_state: ScrollViewState::default(),
             neo_auto_scroll: Arc::new(AtomicBool::new(true)),
             neo_hide_task_list: false,
+            show_neo_details: false,
             neo_result_rx,
             neo_result_tx,
             data_result_rx,
@@ -711,6 +714,10 @@ impl App {
                             created_at: Some(chrono::Utc::now().to_rfc3339()),
                             updated_at: None,
                             url: None,
+                            started_by: None,
+                            linked_prs: Vec::new(),
+                            entities: Vec::new(),
+                            policies: Vec::new(),
                         };
                         self.state.neo_tasks.insert(0, new_task);
                         self.neo_tasks_list.set_items(self.state.neo_tasks.clone());
@@ -856,6 +863,7 @@ impl App {
         let show_help = self.show_help;
         let show_org_selector = self.show_org_selector;
         let show_logs = self.show_logs;
+        let show_neo_details = self.show_neo_details;
         let logs_scroll_offset = self.logs_scroll_offset;
         let logs_word_wrap = self.logs_word_wrap;
         let logs_cache = &self.logs_cache;
@@ -888,6 +896,19 @@ impl App {
         let platform_desc_scroll_state = &mut self.platform_desc_scroll_state;
 
         self.terminal.draw(|frame| {
+            // Get selected task for details dialog (cloned inside closure)
+            let selected_task_for_details: Option<NeoTask> = if show_neo_details {
+                // First try to use the current task if one is loaded
+                if let Some(ref task_id) = state.current_task_id {
+                    state.neo_tasks.iter().find(|t| &t.id == task_id).cloned()
+                } else {
+                    // Fall back to selected task in list
+                    neo_tasks_list.selected().cloned()
+                }
+            } else {
+                None
+            };
+
             // Show splash screen (minimum 5 seconds or until dismissed)
             if show_splash {
                 ui::render_splash(frame, theme, spinner_char, splash_dont_show_again, is_loading);
@@ -970,6 +991,13 @@ impl App {
                 ui::render_logs(frame, theme, logs_cache, logs_scroll_offset, logs_word_wrap);
             }
 
+            // Neo task details popup
+            if show_neo_details {
+                if let Some(ref task) = selected_task_for_details {
+                    ui::render_neo_details_dialog(frame, theme, task);
+                }
+            }
+
             // Error popup
             if let Some(ref error) = error_msg {
                 ui::render_error_popup(frame, theme, error);
@@ -988,6 +1016,10 @@ impl App {
     fn get_footer_hint(&self) -> String {
         if self.show_help {
             return "Press ? or Esc to close help".to_string();
+        }
+
+        if self.show_neo_details {
+            return "Press d or Esc to close details".to_string();
         }
 
         if self.show_logs {
@@ -1009,7 +1041,7 @@ impl App {
                 Tab::Stacks => "↑↓: navigate | o: org | l: logs | Enter: details | r: refresh | q: quit".to_string(),
                 Tab::Esc => "↑↓: navigate | o: org | l: logs | Enter: load | O: resolve | q: quit".to_string(),
                 Tab::Neo => if self.neo_hide_task_list {
-                    "j/k: scroll | n: new | i: type | Esc: show tasks | q: quit".to_string()
+                    "j/k: scroll | d: details | n: new | i: type | Esc: show tasks | q: quit".to_string()
                 } else {
                     "↑↓: tasks | Enter: select | n: new | i: type | q: quit".to_string()
                 },
@@ -1038,6 +1070,14 @@ impl App {
         if self.show_help {
             if keys::is_escape(&key) || keys::is_char(&key, '?') {
                 self.show_help = false;
+            }
+            return;
+        }
+
+        // Handle Neo details popup
+        if self.show_neo_details {
+            if keys::is_escape(&key) || keys::is_char(&key, 'd') {
+                self.show_neo_details = false;
             }
             return;
         }
@@ -1162,12 +1202,26 @@ impl App {
         }
 
         if keys::is_tab(&key) {
+            let old_tab = self.tab;
             self.tab = self.tab.next();
+            // When switching to Neo tab, show task list unless there's an active task
+            if self.tab == Tab::Neo && old_tab != Tab::Neo {
+                if self.state.current_task_id.is_none() {
+                    self.neo_hide_task_list = false;
+                }
+            }
             return;
         }
 
         if keys::is_backtab(&key) {
+            let old_tab = self.tab;
             self.tab = self.tab.previous();
+            // When switching to Neo tab, show task list unless there's an active task
+            if self.tab == Tab::Neo && old_tab != Tab::Neo {
+                if self.state.current_task_id.is_none() {
+                    self.neo_hide_task_list = false;
+                }
+            }
             return;
         }
 
@@ -1371,6 +1425,13 @@ impl App {
                 self.load_selected_task().await;
                 self.neo_hide_task_list = true;
             }
+        } else if keys::is_char(&key, 'd') {
+            // Show task details dialog only when in full-width chat mode (task list hidden)
+            if self.neo_hide_task_list && self.state.current_task_id.is_some() {
+                // Refresh task details before showing dialog
+                self.refresh_current_task_details().await;
+                self.show_neo_details = true;
+            }
         }
     }
 
@@ -1395,6 +1456,28 @@ impl App {
                     }
 
                     self.is_loading = false;
+                }
+            }
+        }
+    }
+
+    /// Refresh current task details from the API
+    async fn refresh_current_task_details(&mut self) {
+        let task_id = match &self.state.current_task_id {
+            Some(id) => id.clone(),
+            None => return,
+        };
+
+        if let Some(ref client) = self.client {
+            if let Some(org) = &self.state.organization {
+                // Fetch task metadata using dedicated endpoint (more efficient than listing all tasks)
+                if let Ok(updated_task) = client.get_neo_task(org, &task_id).await {
+                    // Update the task in our local state
+                    if let Some(local_task) = self.state.neo_tasks.iter_mut().find(|t| t.id == task_id) {
+                        *local_task = updated_task.clone();
+                    }
+                    // Also update the tasks list
+                    self.neo_tasks_list.set_items(self.state.neo_tasks.clone());
                 }
             }
         }

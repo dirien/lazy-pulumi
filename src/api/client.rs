@@ -274,16 +274,53 @@ impl PulumiClient {
             return Err(ApiError::ApiResponse { status, message });
         }
 
+        let text = response.text().await?;
+        tracing::debug!("Neo tasks API response: {}", &text[..text.len().min(500)]);
+
+        // Try parsing as { tasks: [...] } first
         #[derive(serde::Deserialize)]
         struct TasksResponse {
             #[serde(default)]
             tasks: Vec<NeoTask>,
         }
 
-        let data: TasksResponse = response.json().await.unwrap_or(TasksResponse {
-            tasks: vec![],
-        });
-        Ok(data.tasks)
+        if let Ok(data) = serde_json::from_str::<TasksResponse>(&text) {
+            return Ok(data.tasks);
+        }
+
+        // Try parsing as direct array
+        if let Ok(tasks) = serde_json::from_str::<Vec<NeoTask>>(&text) {
+            return Ok(tasks);
+        }
+
+        // Log and return error
+        tracing::error!("Failed to parse Neo tasks response. Response: {}", &text[..text.len().min(1000)]);
+        Err(ApiError::Parse("Failed to parse tasks response".to_string()))
+    }
+
+    /// Get a single Neo task's metadata by ID
+    pub async fn get_neo_task(&self, org: &str, task_id: &str) -> Result<NeoTask, ApiError> {
+        let url = format!(
+            "{}/api/preview/agents/{}/tasks/{}",
+            self.config.base_url, org, task_id
+        );
+
+        let response = self.client.get(&url).send().await?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let message = response.text().await.unwrap_or_default();
+            return Err(ApiError::ApiResponse { status, message });
+        }
+
+        let text = response.text().await?;
+        tracing::debug!("Neo task metadata response: {}", &text[..text.len().min(500)]);
+
+        serde_json::from_str::<NeoTask>(&text)
+            .map_err(|e| {
+                tracing::error!("Failed to parse Neo task metadata: {}. Response: {}", e, &text[..text.len().min(1000)]);
+                ApiError::Parse(format!("Failed to parse task metadata: {}", e))
+            })
     }
 
     /// Create a new Neo task
