@@ -55,7 +55,7 @@ impl Tab {
         match self {
             Tab::Dashboard => " Dashboard ",
             Tab::Stacks => " Stacks ",
-            Tab::Esc => " ESC ",
+            Tab::Esc => " Environment ",
             Tab::Neo => " NEO ",
         }
     }
