@@ -1,19 +1,53 @@
 //! Theme and styling for the Pulumi TUI
 //!
-//! A cohesive color palette inspired by Pulumi's brand colors
-//! with a modern, easy-on-the-eyes design.
+//! Official Pulumi brand color palette for a polished, on-brand design.
+//! Brand colors: Yellow, Salmon, Fuchsia, Purple, Violet, Blue
 
 use ratatui::style::{Color, Modifier, Style};
 
-/// Color palette for direct access
+/// Official Pulumi brand colors
+pub mod brand {
+    use ratatui::style::Color;
+
+    /// Pulumi Yellow - #f7bf2a (RGB 247, 191, 42)
+    pub const YELLOW: Color = Color::Rgb(247, 191, 42);
+
+    /// Pulumi Salmon - #f26e7e (RGB 242, 110, 126)
+    pub const SALMON: Color = Color::Rgb(242, 110, 126);
+
+    /// Pulumi Fuchsia - #bd4c85 (RGB 189, 76, 133)
+    pub const FUCHSIA: Color = Color::Rgb(189, 76, 133);
+
+    /// Pulumi Purple - #8a3391 (RGB 138, 51, 145)
+    pub const PURPLE: Color = Color::Rgb(138, 51, 145);
+
+    /// Pulumi Violet - #805ac3 (RGB 128, 90, 195)
+    pub const VIOLET: Color = Color::Rgb(128, 90, 195);
+
+    /// Pulumi Blue - #4d5bd9 (RGB 77, 91, 217)
+    pub const BLUE: Color = Color::Rgb(77, 91, 217);
+}
+
+/// Color palette for direct access to brand colors
+#[allow(dead_code)]
 pub struct Colors {
-    pub cyan: Color,
+    pub yellow: Color,
+    pub salmon: Color,
+    pub fuchsia: Color,
+    pub purple: Color,
+    pub violet: Color,
+    pub blue: Color,
 }
 
 impl Default for Colors {
     fn default() -> Self {
         Self {
-            cyan: Color::Rgb(78, 201, 176), // Teal/cyan (for title)
+            yellow: brand::YELLOW,
+            salmon: brand::SALMON,
+            fuchsia: brand::FUCHSIA,
+            purple: brand::PURPLE,
+            violet: brand::VIOLET,
+            blue: brand::BLUE,
         }
     }
 }
@@ -53,31 +87,31 @@ pub struct Theme {
 impl Default for Theme {
     fn default() -> Self {
         Self {
-            // Pulumi purple/violet primary
-            primary: Color::Rgb(138, 94, 255),    // Pulumi purple
-            secondary: Color::Rgb(99, 179, 237),  // Soft blue
-            accent: Color::Rgb(246, 173, 85),     // Warm orange
+            // Official Pulumi brand colors
+            primary: brand::VIOLET,               // Pulumi Violet - main accent
+            secondary: brand::BLUE,               // Pulumi Blue - secondary accent
+            accent: brand::YELLOW,                // Pulumi Yellow - highlights/accents
 
-            // Dark mode backgrounds
-            bg_dark: Color::Rgb(22, 22, 30),      // Near black
-            bg_medium: Color::Rgb(32, 32, 44),    // Dark gray
-            bg_light: Color::Rgb(45, 45, 60),     // Medium dark
+            // Dark mode backgrounds (complement the brand colors)
+            bg_dark: Color::Rgb(18, 18, 24),      // Deep dark with purple undertone
+            bg_medium: Color::Rgb(28, 28, 38),    // Dark with subtle warmth
+            bg_light: Color::Rgb(42, 42, 56),     // Medium dark
 
-            // Text
-            text_primary: Color::Rgb(240, 240, 250),
-            text_secondary: Color::Rgb(180, 180, 200),
-            text_muted: Color::Rgb(120, 120, 140),
+            // Text (light text for dark backgrounds)
+            text_primary: Color::Rgb(245, 245, 252),
+            text_secondary: Color::Rgb(185, 185, 205),
+            text_muted: Color::Rgb(125, 125, 150),
 
-            // Status
-            success: Color::Rgb(72, 187, 120),    // Green
-            warning: Color::Rgb(246, 173, 85),    // Orange
-            error: Color::Rgb(245, 101, 101),     // Red
-            info: Color::Rgb(99, 179, 237),       // Blue
+            // Status colors (blend with brand palette)
+            success: Color::Rgb(72, 187, 120),    // Green (kept for accessibility)
+            warning: brand::YELLOW,               // Pulumi Yellow
+            error: brand::SALMON,                 // Pulumi Salmon
+            info: brand::BLUE,                    // Pulumi Blue
 
-            // Special
-            highlight: Color::Rgb(138, 94, 255),
-            border: Color::Rgb(60, 60, 80),
-            border_focused: Color::Rgb(138, 94, 255),
+            // Special accents
+            highlight: brand::FUCHSIA,            // Pulumi Fuchsia for highlights
+            border: Color::Rgb(55, 55, 75),       // Muted border
+            border_focused: brand::VIOLET,        // Pulumi Violet for focused borders
 
             // Direct color access
             colors: Colors::default(),

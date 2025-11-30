@@ -161,11 +161,11 @@ pub fn render_splash(
 
     frame.render_widget(pixel_paragraph, chunks[1]);
 
-    // Render title
+    // Render title - use Pulumi Violet for brand consistency
     let title_line = Line::from(vec![
         Span::styled(
             "Lazy Pulumi",
-            Style::default().fg(theme.colors.cyan).add_modifier(Modifier::BOLD),
+            Style::default().fg(theme.colors.violet).add_modifier(Modifier::BOLD),
         ),
     ]);
 
