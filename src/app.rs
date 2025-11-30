@@ -5,9 +5,11 @@
 
 use color_eyre::Result;
 use crossterm::event::KeyEvent;
+use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::process::Command;
 use tokio::sync::mpsc;
 use tui_scrollview::ScrollViewState;
 
@@ -212,6 +214,40 @@ pub struct App {
 }
 
 impl App {
+    /// Get the default organization from pulumi CLI
+    async fn get_default_org() -> Option<String> {
+        let output = Command::new("pulumi")
+            .args(["org", "get-default"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .output()
+            .await
+            .ok()?;
+
+        if output.status.success() {
+            let org = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !org.is_empty() {
+                return Some(org);
+            }
+        }
+        None
+    }
+
+    /// Set the default organization using pulumi CLI
+    /// Spawns in background fire-and-forget to avoid interfering with TUI
+    fn spawn_set_default_org(org: String) {
+        tokio::spawn(async move {
+            let _ = Command::new("pulumi")
+                .args(["org", "set-default", &org])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .output()
+                .await;
+        });
+    }
+
     /// Create a new application
     pub async fn new() -> Result<Self> {
         let terminal = tui::init()?;
@@ -274,19 +310,25 @@ impl App {
             self.is_loading = true;
             self.spinner.set_message("Loading organizations...");
 
+            // Get the default org from CLI first
+            let default_org = Self::get_default_org().await;
+
             // Get organizations
             match client.list_organizations().await {
                 Ok(orgs) => {
-                    tracing::info!("Loaded {} organizations", orgs.len());
                     self.state.organizations = orgs.clone();
                     self.org_list.set_items(orgs);
-                    if let Some(first_org) = self.state.organizations.first() {
-                        self.state.organization = Some(first_org.clone());
-                        tracing::info!("Selected organization: {}", first_org);
+
+                    // Use CLI default org if it exists in the list, otherwise fall back to first
+                    let selected_org = default_org
+                        .filter(|d| self.state.organizations.contains(d))
+                        .or_else(|| self.state.organizations.first().cloned());
+
+                    if let Some(org) = selected_org {
+                        self.state.organization = Some(org);
                     }
                 }
                 Err(e) => {
-                    tracing::error!("Failed to load organizations: {}", e);
                     self.error = Some(format!("Failed to load organizations: {}", e));
                 }
             }
@@ -700,9 +742,13 @@ impl App {
             } else if keys::is_enter(&key) {
                 // Select organization and refresh data
                 if let Some(org) = self.org_list.selected().cloned() {
-                    self.state.organization = Some(org);
+                    self.state.organization = Some(org.clone());
                     self.show_org_selector = false;
                     self.is_loading = true;
+
+                    // Set the default organization using pulumi CLI (fire-and-forget)
+                    Self::spawn_set_default_org(org);
+
                     self.spinner.set_message("Loading organization data...");
 
                     // Clear all view-specific state
