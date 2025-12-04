@@ -9,6 +9,7 @@ Renders application state to Ratatui frames.
 | File | View | Description |
 |------|------|-------------|
 | `dashboard.rs` | Dashboard | Stats cards, resource chart, recent updates |
+| `commands.rs` | Commands | Pulumi CLI command execution with streaming output |
 | `stacks.rs` | Stacks | Stack list and update history |
 | `esc.rs` | ESC | Environments list, YAML editor |
 | `neo.rs` | Neo | Chat interface with markdown rendering |
@@ -72,3 +73,20 @@ Dedicated 2-line area between chat and input:
 4. **Background polling**: Poll every few seconds when tab active
 
 Reference: [Tenere](https://github.com/pythops/tenere), [tui-scrollview](https://github.com/joshka/tui-scrollview)
+
+## Commands View
+
+Renders Pulumi CLI command execution interface (LazyGit-style).
+
+### Layout
+- **Left panel**: Command categories and commands list
+- **Input dialog**: Parameter input fields (popup)
+- **Confirm dialog**: Yes/No for destructive commands
+- **Output view**: Streaming command output with scroll
+
+### Output Colorization
+`colorize_pulumi_output()` applies colors based on content:
+- Green: created, succeeded, unchanged
+- Red: deleted, failed, error
+- Yellow: updated, warning
+- Cyan: reading, refreshing

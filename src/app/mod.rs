@@ -24,6 +24,7 @@ use crate::api::{
     EscEnvironmentSummary, NeoTask, PulumiClient, RegistryPackage, RegistryTemplate, Service,
     Stack,
 };
+use crate::commands::{CommandCategory, CommandExecution, CommandResult, PulumiCommand, commands_by_category};
 use crate::components::{Spinner, StatefulList, TextEditor, TextInput};
 use tui_logger::TuiWidgetState;
 use crate::config::Config;
@@ -168,6 +169,30 @@ pub struct App {
     pub(super) startup_result_rx: mpsc::Receiver<types::StartupCheckResult>,
     /// Channel sender for async startup checks
     pub(super) startup_result_tx: mpsc::Sender<types::StartupCheckResult>,
+
+    // Commands tab state
+    /// Current view state for commands tab
+    pub(super) commands_view_state: ui::CommandsViewState,
+    /// List of command categories
+    pub(super) commands_category_list: StatefulList<CommandCategory>,
+    /// List of commands for selected category
+    pub(super) commands_command_list: StatefulList<&'static PulumiCommand>,
+    /// Current command execution (if any)
+    pub(super) current_command_execution: Option<CommandExecution>,
+    /// Parameter input fields for current command
+    pub(super) commands_param_inputs: Vec<TextInput>,
+    /// Currently focused parameter index
+    pub(super) commands_param_focus_index: usize,
+    /// Output scroll state
+    pub(super) commands_output_scroll: ScrollViewState,
+    /// Filter input for searching commands
+    pub(super) commands_filter_input: TextInput,
+    /// Whether the filter input is focused
+    pub(super) commands_is_filtering: bool,
+    /// Channel for receiving command execution results
+    pub(super) command_result_rx: mpsc::Receiver<CommandResult>,
+    /// Channel sender for command execution results
+    pub(super) command_result_tx: mpsc::Sender<CommandResult>,
 }
 
 impl App {
@@ -197,6 +222,23 @@ impl App {
 
         // Create channel for async startup check results
         let (startup_result_tx, startup_result_rx) = mpsc::channel::<types::StartupCheckResult>(4);
+
+        // Create channel for command execution results
+        let (command_result_tx, command_result_rx) = mpsc::channel::<CommandResult>(64);
+
+        // Initialize commands category list
+        let mut commands_category_list = StatefulList::new();
+        commands_category_list.set_items(CommandCategory::all().to_vec());
+        commands_category_list.select(Some(0));
+
+        // Initialize commands list with first category
+        let mut commands_command_list: StatefulList<&'static PulumiCommand> = StatefulList::new();
+        let initial_commands = commands_by_category(CommandCategory::StackOperations);
+        let has_commands = !initial_commands.is_empty();
+        commands_command_list.set_items(initial_commands);
+        if has_commands {
+            commands_command_list.select(Some(0));
+        }
 
         // Determine if splash should be shown based on config
         let show_splash = config.show_splash;
@@ -257,6 +299,18 @@ impl App {
             pending_data_loads: 0,
             startup_result_rx,
             startup_result_tx,
+            // Commands tab state
+            commands_view_state: ui::CommandsViewState::default(),
+            commands_category_list,
+            commands_command_list,
+            current_command_execution: None,
+            commands_param_inputs: Vec::new(),
+            commands_param_focus_index: 0,
+            commands_output_scroll: ScrollViewState::default(),
+            commands_filter_input: TextInput::new(),
+            commands_is_filtering: false,
+            command_result_rx,
+            command_result_tx,
         };
 
         // If splash is not shown, run startup checks and load data immediately
@@ -295,10 +349,17 @@ impl App {
             // Check for async Neo results (non-blocking)
             self.process_neo_results();
 
+            // Check for async command results (non-blocking)
+            self.process_command_results();
+
             // Handle events
             match self.events.next().await? {
                 Event::Tick => {
                     self.spinner.tick();
+
+                    // Process command results on every tick for responsive streaming output
+                    self.process_command_results();
+
                     // Poll for Neo updates if we're waiting for a response (fast polling)
                     if self.neo_polling {
                         self.neo_poll_counter += 1;
@@ -390,6 +451,17 @@ impl App {
         let templates_list = &mut self.templates_list;
         let platform_desc_scroll_state = &mut self.platform_desc_scroll_state;
 
+        // Commands state
+        let commands_view_state = self.commands_view_state;
+        let commands_category_list = &mut self.commands_category_list;
+        let commands_command_list = &mut self.commands_command_list;
+        let current_command_execution = self.current_command_execution.as_ref();
+        let commands_param_inputs = &self.commands_param_inputs;
+        let commands_param_focus_index = self.commands_param_focus_index;
+        let commands_output_scroll = &mut self.commands_output_scroll;
+        let commands_filter_input = &self.commands_filter_input;
+        let commands_is_filtering = self.commands_is_filtering;
+
         self.terminal.draw(|frame| {
             // Get selected task for details dialog (cloned inside closure)
             let selected_task_for_details: Option<NeoTask> = if show_neo_details {
@@ -473,6 +545,22 @@ impl App {
                         packages_list,
                         templates_list,
                         platform_desc_scroll_state,
+                    );
+                }
+                Tab::Commands => {
+                    ui::render_commands_view(
+                        frame,
+                        theme,
+                        content_area,
+                        commands_view_state,
+                        commands_category_list,
+                        commands_command_list,
+                        current_command_execution,
+                        commands_param_inputs,
+                        commands_param_focus_index,
+                        commands_output_scroll,
+                        commands_filter_input,
+                        commands_is_filtering,
                     );
                 }
             }
@@ -579,7 +667,37 @@ impl App {
                     "↑↓: navigate | ←→: switch view | o: org | l: logs | r: refresh | q: quit"
                         .to_string()
                 }
+                Tab::Commands => {
+                    match self.commands_view_state {
+                        ui::CommandsViewState::BrowsingCategories => {
+                            "↑↓: categories | →/Enter: commands | /: filter | q: quit".to_string()
+                        }
+                        ui::CommandsViewState::BrowsingCommands => {
+                            "↑↓: commands | ←: categories | Enter: run | /: filter | q: quit".to_string()
+                        }
+                        ui::CommandsViewState::InputDialog => {
+                            "Tab: next field | Enter: run | Esc: cancel".to_string()
+                        }
+                        ui::CommandsViewState::ConfirmDialog => {
+                            "y: confirm | n/Esc: cancel".to_string()
+                        }
+                        ui::CommandsViewState::OutputView => {
+                            "j/k: scroll | Esc: close | q: quit".to_string()
+                        }
+                    }
+                }
             },
+        }
+    }
+
+    /// Process command execution results (non-blocking)
+    fn process_command_results(&mut self) {
+        use crate::commands::update_execution_state;
+
+        while let Ok(result) = self.command_result_rx.try_recv() {
+            if let Some(ref mut execution) = self.current_command_execution {
+                update_execution_state(execution, result);
+            }
         }
     }
 }

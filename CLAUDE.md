@@ -45,6 +45,10 @@ src/
 │   └── CLAUDE.md   # App state, handlers, Neo polling
 ├── api/            # Pulumi Cloud API client
 │   └── CLAUDE.md   # API endpoints, pagination
+├── commands/       # Pulumi CLI command execution
+│   ├── mod.rs      # Module exports
+│   ├── types.rs    # Command definitions, categories, parameters
+│   └── executor.rs # PTY-based command execution
 ├── components/     # Reusable UI widgets
 │   └── CLAUDE.md   # Widget documentation
 ├── ui/             # View layer (rendering)

@@ -2,6 +2,7 @@
 //!
 //! Contains all view rendering logic for the TUI.
 
+mod commands;
 mod dashboard;
 mod esc;
 mod header;
@@ -14,6 +15,7 @@ mod splash;
 mod stacks;
 pub mod syntax;
 
+pub use commands::{render_commands_view, CommandsViewState};
 pub use dashboard::render_dashboard;
 pub use esc::{render_esc_view, render_esc_editor};
 pub use header::render_header;

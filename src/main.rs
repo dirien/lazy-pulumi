@@ -5,6 +5,7 @@
 
 mod api;
 mod app;
+mod commands;
 mod components;
 mod config;
 mod event;
