@@ -62,12 +62,13 @@ pub enum Tab {
     Esc,
     Neo,
     Platform,
+    Commands,
 }
 
 impl Tab {
     pub fn all() -> &'static [Tab] {
-        // Neo is second after Dashboard
-        &[Tab::Dashboard, Tab::Neo, Tab::Stacks, Tab::Esc, Tab::Platform]
+        // Dashboard, Commands, Neo, then the rest
+        &[Tab::Dashboard, Tab::Commands, Tab::Neo, Tab::Stacks, Tab::Esc, Tab::Platform]
     }
 
     pub fn title(&self) -> &'static str {
@@ -77,26 +78,29 @@ impl Tab {
             Tab::Esc => " Environment ",
             Tab::Neo => " Neo ",
             Tab::Platform => " Platform ",
+            Tab::Commands => " Commands ",
         }
     }
 
     pub fn index(&self) -> usize {
         match self {
             Tab::Dashboard => 0,
-            Tab::Neo => 1,
-            Tab::Stacks => 2,
-            Tab::Esc => 3,
-            Tab::Platform => 4,
+            Tab::Commands => 1,
+            Tab::Neo => 2,
+            Tab::Stacks => 3,
+            Tab::Esc => 4,
+            Tab::Platform => 5,
         }
     }
 
     pub fn from_index(index: usize) -> Self {
         match index {
             0 => Tab::Dashboard,
-            1 => Tab::Neo,
-            2 => Tab::Stacks,
-            3 => Tab::Esc,
-            4 => Tab::Platform,
+            1 => Tab::Commands,
+            2 => Tab::Neo,
+            3 => Tab::Stacks,
+            4 => Tab::Esc,
+            5 => Tab::Platform,
             _ => Tab::Dashboard,
         }
     }

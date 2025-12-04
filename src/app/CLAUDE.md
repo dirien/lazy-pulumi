@@ -23,7 +23,7 @@ Central state machine managing UI state, data, and event loop.
 ## Key Types
 
 ```rust
-enum Tab { Dashboard, Stacks, Esc, Neo, Platform }
+enum Tab { Dashboard, Commands, Neo, Stacks, Esc, Platform }
 enum FocusMode { Normal, Input }
 struct AppState { stacks, environments, neo_tasks, resources, ... }
 ```
@@ -35,6 +35,7 @@ struct AppState { stacks, environments, neo_tasks, resources, ... }
 - `handle_esc_key()` - ESC environments
 - `handle_neo_key()` - Neo chat (see below)
 - `handle_platform_key()` - Platform view
+- `handle_commands_key()` - Commands tab (see below)
 
 ## Neo Chat State Variables
 
@@ -78,3 +79,31 @@ Uses tokio channels for parallel async requests. Sets `is_loading` flag during r
 - Pulumi CLI availability (`pulumi version`)
 
 Uses `StartupCheckResult` enum and tokio channel.
+
+## Commands Tab
+
+Executes Pulumi CLI commands with streaming output via PTY.
+
+### View States (`CommandsViewState`)
+- `BrowsingCategories` - Navigating command categories
+- `BrowsingCommands` - Navigating commands in selected category
+- `InputDialog` - Filling command parameters
+- `ConfirmDialog` - Confirming destructive commands
+- `OutputView` - Viewing command output
+
+### Key Bindings
+| Key | Context | Action |
+|-----|---------|--------|
+| `↑/↓` | Categories/Commands | Navigate |
+| `→/Enter` | Categories | Enter commands list |
+| `←` | Commands | Back to categories |
+| `Enter` | Commands | Run selected command |
+| `Tab` | InputDialog | Next parameter |
+| `y/n` | ConfirmDialog | Confirm/cancel |
+| `j/k` | OutputView | Scroll 3 lines |
+| `g/G` | OutputView | Top/bottom |
+| `Esc` | OutputView | Close |
+
+### PTY Execution
+Commands run in pseudo-TTY via `portable-pty` crate for proper streaming output.
+Deduplication filters repeated progress lines from Pulumi output.
