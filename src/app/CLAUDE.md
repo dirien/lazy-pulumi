@@ -48,6 +48,9 @@ struct AppState { stacks, environments, neo_tasks, resources, ... }
 | `neo_scroll_state` | ScrollViewState | Scroll position (tui-scrollview) |
 | `neo_auto_scroll` | Arc<AtomicBool> | Thread-safe auto-scroll toggle |
 | `neo_task_is_running` | bool | Task status is "running" |
+| `neo_show_command_picker` | bool | Show slash command picker popup |
+| `neo_filtered_commands` | Vec<NeoSlashCommand> | Filtered commands for picker |
+| `neo_command_picker_index` | usize | Selected command in picker |
 
 ## Neo Polling Mechanism
 
@@ -60,6 +63,7 @@ struct AppState { stacks, environments, neo_tasks, resources, ... }
 | Key | Action |
 |-----|--------|
 | `i` | Enter input mode |
+| `/` | Open slash command picker |
 | `n` | New task |
 | `d` | Task details dialog |
 | `j/k` | Scroll 3 lines |
@@ -67,6 +71,36 @@ struct AppState { stacks, environments, neo_tasks, resources, ... }
 | `g/G` | Jump to top/bottom |
 | `Enter` | Load selected task |
 | `Esc` | Show task list |
+
+## Neo Slash Commands
+
+Slash commands allow users to invoke predefined Neo prompts.
+
+### How it works
+1. Commands are fetched from `GET /api/console/agents/{org}/commands`
+2. When user types `/` in input, picker shows filtered commands
+3. User navigates with ↑/↓, selects with Enter or Tab to complete
+4. Sends to `POST /api/preview/agents/{org}/tasks` with command payload:
+   ```json
+   {
+     "message": {
+       "type": "user_message",
+       "content": "{{cmd:name:tag}}",
+       "timestamp": "...",
+       "commands": { "{{cmd:name:tag}}": { ... command details ... } }
+     }
+   }
+   ```
+
+### Input Mode Key Bindings (when picker showing)
+| Key | Action |
+|-----|--------|
+| `↑/↓` or `Ctrl+P/N` | Navigate commands |
+| `Tab` | Insert command into input |
+| `Enter` | Insert command into input |
+| `Esc` | Cancel picker |
+
+Note: Commands are inserted (not immediately executed) so users can add text or multiple commands before sending.
 
 ## Data Loading (data.rs)
 

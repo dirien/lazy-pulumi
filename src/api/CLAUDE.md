@@ -34,6 +34,45 @@ Field names: uses `created`/`modified` (NOT `createdAt`/`modifiedAt`)
 
 Event body types: `user_message`, `assistant_message`, `set_task_name`, `exec_tool_call`, `tool_response`, `user_approval_request`
 
+### Neo Slash Commands
+- `GET /api/console/agents/{org}/commands` - List available slash commands
+
+**New task** with slash commands (uses `message` wrapper):
+```json
+{
+  "message": {
+    "type": "user_message",
+    "content": "{{cmd:name:tag}}",
+    "timestamp": "2025-12-05T20:45:08.613Z",
+    "commands": {
+      "{{cmd:name:tag}}": {
+        "name": "command-name",
+        "prompt": "Full prompt text...",
+        "description": "Short description",
+        "builtIn": true,
+        "modifiedAt": "0001-01-01T00:00:00.000Z",
+        "tag": "hash-string"
+      }
+    }
+  }
+}
+```
+
+**Existing task** continuation with slash commands (uses `event` wrapper):
+```json
+{
+  "event": {
+    "type": "user_message",
+    "content": "{{cmd:cmd1:tag1}} {{cmd:cmd2:tag2}}",
+    "timestamp": "2025-12-05T21:22:00.773Z",
+    "commands": {
+      "{{cmd:cmd1:tag1}}": { ... },
+      "{{cmd:cmd2:tag2}}": { ... }
+    }
+  }
+}
+```
+
 ### Resource Search
 - `GET /api/orgs/{org}/search/resourcesv2` - Search resources (v2 endpoint)
 - Pagination: `page` (1-based), `size` params

@@ -27,6 +27,9 @@ const APPROVAL_ICON: &str = "❓";
 const INFO_ICON: &str = "ℹ️";
 const THINKING_ICON: &str = "🤔";
 
+/// Slash command for the picker
+use crate::api::NeoSlashCommand;
+
 /// Render the Neo chat view
 pub fn render_neo_view(
     frame: &mut Frame,
@@ -40,10 +43,30 @@ pub fn render_neo_view(
     is_loading: bool,
     spinner_char: &str,
     hide_task_list: bool,
+    show_command_picker: bool,
+    filtered_commands: &[NeoSlashCommand],
+    command_picker_index: usize,
+    all_commands: &[NeoSlashCommand],
+    pending_commands: &[NeoSlashCommand],
 ) {
     if hide_task_list {
         // Full-width chat when task list is hidden
-        render_chat_view(frame, theme, area, messages, input, scroll_state, auto_scroll, is_loading, spinner_char);
+        render_chat_view(
+            frame,
+            theme,
+            area,
+            messages,
+            input,
+            scroll_state,
+            auto_scroll,
+            is_loading,
+            spinner_char,
+            show_command_picker,
+            filtered_commands,
+            command_picker_index,
+            all_commands,
+            pending_commands,
+        );
     } else {
         // Split view with task list on left
         let chunks = Layout::default()
@@ -52,7 +75,22 @@ pub fn render_neo_view(
             .split(area);
 
         render_tasks_list(frame, theme, chunks[0], tasks);
-        render_chat_view(frame, theme, chunks[1], messages, input, scroll_state, auto_scroll, is_loading, spinner_char);
+        render_chat_view(
+            frame,
+            theme,
+            chunks[1],
+            messages,
+            input,
+            scroll_state,
+            auto_scroll,
+            is_loading,
+            spinner_char,
+            show_command_picker,
+            filtered_commands,
+            command_picker_index,
+            all_commands,
+            pending_commands,
+        );
     }
 }
 
@@ -129,6 +167,9 @@ fn render_tasks_list(
     frame.render_stateful_widget(list, area, &mut tasks.state);
 }
 
+// Command picker icon
+const COMMAND_ICON: &str = "⌘";
+
 fn render_chat_view(
     frame: &mut Frame,
     theme: &Theme,
@@ -139,14 +180,27 @@ fn render_chat_view(
     auto_scroll: &Arc<AtomicBool>,
     is_loading: bool,
     spinner_char: &str,
+    show_command_picker: bool,
+    filtered_commands: &[NeoSlashCommand],
+    command_picker_index: usize,
+    all_commands: &[NeoSlashCommand],
+    pending_commands: &[NeoSlashCommand],
 ) {
-    // Layout: messages area, thinking indicator (if loading), input area
+    // Layout: messages area, thinking indicator (if loading), command picker (if showing), input area
     let thinking_height = if is_loading { 2 } else { 0 };
+    let command_picker_height = if show_command_picker {
+        // Show up to 8 commands + 2 for borders
+        (filtered_commands.len().min(8) + 2) as u16
+    } else {
+        0
+    };
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Min(10),
             Constraint::Length(thinking_height),
+            Constraint::Length(command_picker_height),
             Constraint::Length(3),
         ])
         .split(area);
@@ -426,6 +480,26 @@ fn render_chat_view(
         frame.render_widget(thinking_para, chunks[1]);
     }
 
+    // Slash command picker (shown above input when typing '/')
+    if show_command_picker && !filtered_commands.is_empty() {
+        render_command_picker(frame, theme, chunks[2], filtered_commands, command_picker_index);
+    }
+
+    // Determine the input title based on context
+    let input_title = if input.is_focused() {
+        if show_command_picker {
+            " ↑↓: select | Tab: complete | Enter: run "
+        } else if !all_commands.is_empty() {
+            " Type / for commands | Enter to send "
+        } else {
+            " Message (Enter to send, Esc to cancel) "
+        }
+    } else if !all_commands.is_empty() {
+        " Press 'i' to type, '/' for commands "
+    } else {
+        " Press 'i' to type, 'n' for new task "
+    };
+
     // Input area
     let input_block = Block::default()
         .borders(Borders::ALL)
@@ -434,45 +508,235 @@ fn render_chat_view(
         } else {
             theme.border()
         })
-        .title(if input.is_focused() {
-            " Message (Enter to send, Esc to cancel) "
-        } else {
-            " Press 'i' to type, 'n' for new task "
-        })
+        .title(input_title)
         .title_style(if input.is_focused() {
             theme.primary()
         } else {
             theme.subtitle()
         });
 
-    let input_inner = input_block.inner(chunks[2]);
-    frame.render_widget(input_block, chunks[2]);
+    let input_inner = input_block.inner(chunks[3]);
+    frame.render_widget(input_block, chunks[3]);
 
-    // Input text with cursor
+    // Input text with cursor - highlight slash commands with purple background
     let input_value = input.value();
     let cursor_pos = input.cursor();
 
+    // Build a list of command names to highlight
+    let command_names: Vec<&str> = pending_commands.iter().map(|c| c.name.as_str()).collect();
+
     if input.is_focused() {
-        let before_cursor = &input_value[..cursor_pos];
-        let cursor_char = input_value.chars().nth(cursor_pos).unwrap_or(' ');
-        let after_cursor = if cursor_pos < input_value.len() {
-            &input_value[cursor_pos + 1..]
-        } else {
-            ""
-        };
-
-        let input_line = Line::from(vec![
-            Span::styled(before_cursor, theme.input()),
-            Span::styled(cursor_char.to_string(), theme.cursor()),
-            Span::styled(after_cursor, theme.input()),
-        ]);
-
+        // Render input with slash command highlighting
+        let spans = render_input_with_commands(input_value, cursor_pos, &command_names, theme);
+        let input_line = Line::from(spans);
         let input_para = Paragraph::new(input_line);
         frame.render_widget(input_para, input_inner);
     } else {
-        let input_para = Paragraph::new(input_value).style(theme.text_muted());
+        // When not focused, still show command highlighting
+        let spans = render_input_with_commands_unfocused(input_value, &command_names, theme);
+        let input_line = Line::from(spans);
+        let input_para = Paragraph::new(input_line);
         frame.render_widget(input_para, input_inner);
     }
+}
+
+/// Render input text with slash commands highlighted in purple (focused mode with cursor)
+fn render_input_with_commands<'a>(
+    input: &'a str,
+    cursor_pos: usize,
+    command_names: &[&str],
+    theme: &Theme,
+) -> Vec<Span<'a>> {
+    use crate::theme::brand;
+
+    // Purple style for commands
+    let command_style = Style::default()
+        .fg(Color::White)
+        .bg(brand::VIOLET);
+
+    let mut spans = Vec::new();
+    let mut i = 0;
+    let chars: Vec<char> = input.chars().collect();
+
+    while i < chars.len() {
+        if chars[i] == '/' {
+            // Check if this is a known command
+            let remaining: String = chars[i..].iter().collect();
+            let mut found_command = false;
+
+            for &cmd_name in command_names {
+                let pattern = format!("/{}", cmd_name);
+                if remaining.starts_with(&pattern) {
+                    // Check that command ends with space or end of string
+                    let after_cmd = remaining.get(pattern.len()..).unwrap_or("");
+                    if after_cmd.is_empty() || after_cmd.starts_with(' ') {
+                        // Found a matching command - render it with purple background
+                        let cmd_start = i;
+                        let cmd_end = i + pattern.len();
+
+                        // Render the command with cursor handling
+                        for (j, c) in pattern.chars().enumerate() {
+                            let char_pos = cmd_start + j;
+                            if char_pos == cursor_pos {
+                                spans.push(Span::styled(c.to_string(), theme.cursor()));
+                            } else {
+                                spans.push(Span::styled(c.to_string(), command_style));
+                            }
+                        }
+
+                        i = cmd_end;
+                        found_command = true;
+                        break;
+                    }
+                }
+            }
+
+            if !found_command {
+                // Regular '/' character
+                if i == cursor_pos {
+                    spans.push(Span::styled("/", theme.cursor()));
+                } else {
+                    spans.push(Span::styled("/", theme.input()));
+                }
+                i += 1;
+            }
+        } else {
+            // Regular character
+            if i == cursor_pos {
+                spans.push(Span::styled(chars[i].to_string(), theme.cursor()));
+            } else {
+                spans.push(Span::styled(chars[i].to_string(), theme.input()));
+            }
+            i += 1;
+        }
+    }
+
+    // Add cursor at end if cursor is at end of input
+    if cursor_pos >= chars.len() {
+        spans.push(Span::styled(" ", theme.cursor()));
+    }
+
+    spans
+}
+
+/// Render input text with slash commands highlighted (unfocused mode, no cursor)
+fn render_input_with_commands_unfocused<'a>(
+    input: &'a str,
+    command_names: &[&str],
+    theme: &Theme,
+) -> Vec<Span<'a>> {
+    use crate::theme::brand;
+
+    // Purple style for commands
+    let command_style = Style::default()
+        .fg(Color::White)
+        .bg(brand::VIOLET);
+
+    let mut spans = Vec::new();
+    let mut i = 0;
+    let chars: Vec<char> = input.chars().collect();
+
+    while i < chars.len() {
+        if chars[i] == '/' {
+            // Check if this is a known command
+            let remaining: String = chars[i..].iter().collect();
+            let mut found_command = false;
+
+            for &cmd_name in command_names {
+                let pattern = format!("/{}", cmd_name);
+                if remaining.starts_with(&pattern) {
+                    // Check that command ends with space or end of string
+                    let after_cmd = remaining.get(pattern.len()..).unwrap_or("");
+                    if after_cmd.is_empty() || after_cmd.starts_with(' ') {
+                        // Found a matching command
+                        spans.push(Span::styled(pattern.clone(), command_style));
+                        i += pattern.len();
+                        found_command = true;
+                        break;
+                    }
+                }
+            }
+
+            if !found_command {
+                spans.push(Span::styled("/", theme.text_muted()));
+                i += 1;
+            }
+        } else {
+            spans.push(Span::styled(chars[i].to_string(), theme.text_muted()));
+            i += 1;
+        }
+    }
+
+    spans
+}
+
+/// Render the slash command picker popup
+fn render_command_picker(
+    frame: &mut Frame,
+    theme: &Theme,
+    area: Rect,
+    commands: &[NeoSlashCommand],
+    selected_index: usize,
+) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(theme.border_focused())
+        .title(" Slash Commands ")
+        .title_style(theme.title());
+
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    // Build command list items
+    let items: Vec<ListItem> = commands
+        .iter()
+        .enumerate()
+        .take(8) // Show max 8 commands
+        .map(|(i, cmd)| {
+            let is_selected = i == selected_index;
+
+            let prefix = if is_selected {
+                format!("{} ", symbols::ARROW_RIGHT)
+            } else {
+                "  ".to_string()
+            };
+
+            // Truncate description if too long
+            let max_desc_len = 50;
+            let desc = if cmd.description.len() > max_desc_len {
+                format!("{}...", &cmd.description[..max_desc_len])
+            } else {
+                cmd.description.clone()
+            };
+
+            let content = Line::from(vec![
+                Span::styled(prefix, theme.primary()),
+                Span::styled(format!("{} ", COMMAND_ICON), theme.accent()),
+                Span::styled(
+                    format!("/{}", cmd.name),
+                    if is_selected {
+                        theme.primary().add_modifier(Modifier::BOLD)
+                    } else {
+                        theme.text()
+                    },
+                ),
+                Span::styled(" - ", theme.text_muted()),
+                Span::styled(
+                    desc,
+                    if is_selected {
+                        theme.text()
+                    } else {
+                        theme.text_muted()
+                    },
+                ),
+            ]);
+
+            ListItem::new(content)
+        })
+        .collect();
+
+    let list = List::new(items).highlight_style(theme.selected());
+    frame.render_widget(list, inner);
 }
 
 // Icons for details dialog

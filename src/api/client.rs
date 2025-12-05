@@ -2,9 +2,10 @@
 
 use super::types::{
     ApiConfig, EscEnvironmentDetails, EscEnvironmentSummary, EscOpenResponse,
-    NeoCreateTaskResponse, NeoMessage, NeoMessageType, NeoTask, NeoTaskResponse, NeoToolCall,
-    RegistryPackage, RegistryPackagesResponse, RegistryTemplate, RegistryTemplatesResponse,
-    Resource, Service, ServicesResponse, Stack, StacksResponse, StackUpdate, User,
+    NeoCreateTaskMessage, NeoCreateTaskResponse, NeoMessage, NeoMessageType, NeoSlashCommand,
+    NeoSlashCommandPayload, NeoTask, NeoTaskResponse, NeoToolCall, RegistryPackage,
+    RegistryPackagesResponse, RegistryTemplate, RegistryTemplatesResponse, Resource, Service,
+    ServicesResponse, Stack, StacksResponse, StackUpdate, User,
 };
 use color_eyre::Result;
 use reqwest::{header, Client};
@@ -730,6 +731,210 @@ impl PulumiClient {
         // Response is 202 Accepted with no body, so return with the task_id
         Ok(NeoTaskResponse {
             task_id: task_id.to_string(),
+            status: None,
+            messages: vec![],
+            has_more: false,
+            requires_approval: false,
+        })
+    }
+
+    /// Continue/respond to an existing Neo task with slash commands
+    /// Uses the `event` wrapper with `commands` map for task continuation
+    pub async fn continue_neo_task_with_commands(
+        &self,
+        org: &str,
+        task_id: &str,
+        content: &str,
+        commands: &[NeoSlashCommand],
+    ) -> Result<NeoTaskResponse, ApiError> {
+        let url = format!(
+            "{}/api/preview/agents/{}/tasks/{}",
+            self.config.base_url, org, task_id
+        );
+
+        let timestamp = chrono::Utc::now().to_rfc3339();
+
+        // Build the commands map with command references as keys
+        let mut commands_map = std::collections::HashMap::new();
+        let mut processed_content = content.to_string();
+
+        for cmd in commands {
+            let command_ref = cmd.command_reference();
+
+            // Replace /command-name with {{cmd:name:tag}} in the content
+            let simple_ref = format!("/{}", cmd.name);
+            if processed_content.contains(&simple_ref) {
+                processed_content = processed_content.replace(&simple_ref, &command_ref);
+            }
+
+            commands_map.insert(
+                command_ref,
+                NeoSlashCommandPayload {
+                    name: cmd.name.clone(),
+                    prompt: cmd.prompt.clone(),
+                    description: cmd.description.clone(),
+                    built_in: cmd.built_in,
+                    modified_at: cmd
+                        .modified_at
+                        .clone()
+                        .unwrap_or_else(|| "0001-01-01T00:00:00.000Z".to_string()),
+                    tag: cmd.tag.clone().unwrap_or_default(),
+                },
+            );
+        }
+
+        // Use "event" wrapper (not "message") for task continuation
+        let body = serde_json::json!({
+            "event": {
+                "type": "user_message",
+                "content": processed_content,
+                "timestamp": timestamp,
+                "commands": commands_map
+            }
+        });
+
+        log::debug!(
+            "Continuing Neo task {} with {} commands",
+            task_id,
+            commands.len()
+        );
+        let response = self.client.post(&url).json(&body).send().await?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let message = response.text().await.unwrap_or_default();
+            log::error!(
+                "Neo continue task with commands error: {} - {}",
+                status,
+                message
+            );
+            return Err(ApiError::ApiResponse { status, message });
+        }
+
+        // Response is 202 Accepted with no body, so return with the task_id
+        Ok(NeoTaskResponse {
+            task_id: task_id.to_string(),
+            status: None,
+            messages: vec![],
+            has_more: false,
+            requires_approval: false,
+        })
+    }
+
+    /// Get available slash commands for Neo
+    pub async fn get_neo_slash_commands(
+        &self,
+        org: &str,
+    ) -> Result<Vec<NeoSlashCommand>, ApiError> {
+        let url = format!(
+            "{}/api/console/agents/{}/commands",
+            self.config.base_url, org
+        );
+
+        log::debug!("GET Neo slash commands: {}", url);
+        let response = self.client.get(&url).send().await?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let message = response.text().await.unwrap_or_default();
+            log::error!("Neo slash commands API error: {} - {}", status, message);
+            return Err(ApiError::ApiResponse { status, message });
+        }
+
+        let text = response.text().await?;
+        log::debug!(
+            "Neo slash commands response (first 500 chars): {}",
+            &text[..text.len().min(500)]
+        );
+
+        // Response is {"commands": [...]} - parse wrapper first
+        #[derive(serde::Deserialize)]
+        struct CommandsResponse {
+            #[serde(default)]
+            commands: Vec<NeoSlashCommand>,
+        }
+
+        let response: CommandsResponse = serde_json::from_str(&text).map_err(|e| {
+            log::error!(
+                "Failed to parse slash commands: {}. Response: {}",
+                e,
+                &text[..text.len().min(1000)]
+            );
+            ApiError::Parse(format!("Failed to parse slash commands: {}", e))
+        })?;
+
+        log::info!("Neo slash commands: fetched {} commands", response.commands.len());
+        Ok(response.commands)
+    }
+
+    /// Create a new Neo task with multiple slash commands embedded in the message
+    /// The content field contains the full message text with command references like /command-name
+    /// The commands map contains the full details for each command
+    pub async fn create_neo_task_with_commands(
+        &self,
+        org: &str,
+        content: &str,
+        commands: &[NeoSlashCommand],
+    ) -> Result<NeoTaskResponse, ApiError> {
+        let url = format!("{}/api/preview/agents/{}/tasks", self.config.base_url, org);
+
+        let timestamp = chrono::Utc::now().to_rfc3339();
+
+        // Build the commands map with command references as keys
+        let mut commands_map = std::collections::HashMap::new();
+        let mut processed_content = content.to_string();
+
+        for cmd in commands {
+            let command_ref = cmd.command_reference();
+
+            // Replace /command-name with {{cmd:name:tag}} in the content
+            let simple_ref = format!("/{}", cmd.name);
+            if processed_content.contains(&simple_ref) {
+                processed_content = processed_content.replace(&simple_ref, &command_ref);
+            }
+
+            commands_map.insert(
+                command_ref,
+                NeoSlashCommandPayload {
+                    name: cmd.name.clone(),
+                    prompt: cmd.prompt.clone(),
+                    description: cmd.description.clone(),
+                    built_in: cmd.built_in,
+                    modified_at: cmd
+                        .modified_at
+                        .clone()
+                        .unwrap_or_else(|| "0001-01-01T00:00:00.000Z".to_string()),
+                    tag: cmd.tag.clone().unwrap_or_default(),
+                },
+            );
+        }
+
+        let message = NeoCreateTaskMessage {
+            message_type: "user_message".to_string(),
+            content: processed_content,
+            timestamp,
+            commands: Some(commands_map),
+        };
+
+        let body = serde_json::json!({ "message": message });
+
+        log::debug!(
+            "Creating Neo task with {} commands",
+            commands.len()
+        );
+        let response = self.client.post(&url).json(&body).send().await?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let message = response.text().await.unwrap_or_default();
+            log::error!("Neo create task with commands error: {} - {}", status, message);
+            return Err(ApiError::ApiResponse { status, message });
+        }
+
+        let create_response: NeoCreateTaskResponse = response.json().await.map_err(ApiError::Http)?;
+
+        Ok(NeoTaskResponse {
+            task_id: create_response.task_id,
             status: None,
             messages: vec![],
             has_more: false,
