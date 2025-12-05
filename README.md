@@ -2,6 +2,9 @@
 
 A stylish terminal UI for Pulumi Cloud, ESC, and Neo built with Ratatui.
 
+> [!NOTE]
+> **New in this version:** Neo now supports slash commands! Press `/` in the Neo view to access predefined prompts like `/get-started`, `/component-version-report`, and more. Commands are highlighted in purple and can be combined with custom text.
+
 ## Features
 
 - **Dashboard**: Overview of your Pulumi resources with quick stats
@@ -92,14 +95,17 @@ Logs are written to a file to avoid interfering with the TUI:
 |-----|--------|
 | `n` | Start new task |
 | `i` | Focus input field |
+| `/` | Open slash command picker |
 | `d` | Show task details (in full-width chat mode) |
-| `Enter` | Send message / Load selected task |
-| `Esc` | Show task list (exit full-width chat) / Unfocus input |
+| `Enter` | Send message / Load selected task / Insert command |
+| `Tab` | Insert selected command (in picker) |
+| `Esc` | Show task list (exit full-width chat) / Unfocus input / Close picker |
 | `j` / `k` | Scroll chat down/up (3 lines) |
 | `J` / `K` | Scroll chat by page |
 | `g` | Jump to oldest messages |
 | `G` | Jump to newest messages + enable auto-scroll |
 | `Page Up/Down` | Scroll messages |
+| `↑` / `↓` | Navigate command picker |
 
 ### Platform View
 | Key | Action |
@@ -192,6 +198,11 @@ Additional UI colors:
 
 The Neo view provides a rich chat interface for Pulumi's AI agent:
 
+- **Slash Commands**: Press `/` to access predefined prompts (e.g., `/get-started`, `/component-version-report`)
+  - Commands appear in a picker with descriptions
+  - Insert commands with Enter or Tab, then add custom text
+  - Multiple commands can be combined in a single message
+  - Commands are highlighted with purple background in the input
 - **Markdown Rendering**: Bold, italic, code blocks, headers, lists
 - **Auto-scroll**: Automatically scrolls to new messages
 - **Task Details Dialog**: Press `d` to view task metadata including:

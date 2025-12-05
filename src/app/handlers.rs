@@ -67,15 +67,47 @@ impl App {
             return;
         }
 
-        // Handle input mode
+        // Handle input mode (Neo tab with command picker support)
         if self.focus == FocusMode::Input {
             if keys::is_escape(&key) {
                 self.focus = FocusMode::Normal;
                 self.neo_input.set_focused(false);
+                self.neo_show_command_picker = false;
+                self.neo_filtered_commands.clear();
             } else if keys::is_enter(&key) {
-                self.send_neo_message();
+                // If command picker is showing, insert the selected command (don't execute yet)
+                if self.neo_show_command_picker && !self.neo_filtered_commands.is_empty() {
+                    self.insert_selected_slash_command();
+                } else {
+                    // Send message (may contain slash commands)
+                    self.send_neo_message();
+                }
+            } else if self.neo_show_command_picker {
+                // Handle command picker navigation
+                if keys::is_up(&key) || (keys::is_ctrl_char(&key, 'p')) {
+                    if self.neo_command_picker_index > 0 {
+                        self.neo_command_picker_index -= 1;
+                    } else if !self.neo_filtered_commands.is_empty() {
+                        self.neo_command_picker_index = self.neo_filtered_commands.len() - 1;
+                    }
+                } else if keys::is_down(&key) || (keys::is_ctrl_char(&key, 'n')) {
+                    if self.neo_command_picker_index + 1 < self.neo_filtered_commands.len() {
+                        self.neo_command_picker_index += 1;
+                    } else {
+                        self.neo_command_picker_index = 0;
+                    }
+                } else if keys::is_tab(&key) {
+                    // Tab inserts the command (same as Enter)
+                    self.insert_selected_slash_command();
+                } else {
+                    // Let input handle the key, then update filtered commands
+                    self.neo_input.handle_key(&key);
+                    self.update_filtered_commands();
+                }
             } else {
+                // Normal input mode - handle key and check for command trigger
                 self.neo_input.handle_key(&key);
+                self.update_filtered_commands();
             }
             return;
         }
@@ -545,6 +577,15 @@ impl App {
         if keys::is_char(&key, 'i') {
             self.focus = FocusMode::Input;
             self.neo_input.set_focused(true);
+        } else if keys::is_char(&key, '/') {
+            // Trigger slash command picker by entering input mode with '/'
+            self.neo_input.set_value("/".to_string());
+            self.focus = FocusMode::Input;
+            self.neo_input.set_focused(true);
+            // Show all commands when just '/' is typed
+            self.neo_filtered_commands = self.state.neo_slash_commands.clone();
+            self.neo_show_command_picker = !self.neo_filtered_commands.is_empty();
+            self.neo_command_picker_index = 0;
         } else if keys::is_char(&key, 'n') {
             // Start new task
             self.state.neo_messages.clear();

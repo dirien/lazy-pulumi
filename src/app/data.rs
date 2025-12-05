@@ -87,8 +87,8 @@ impl App {
             let org = self.state.organization.clone();
             let tx = self.data_result_tx.clone();
 
-            // Track how many loads we're starting
-            self.pending_data_loads = 9;
+            // Track how many loads we're starting (now 10 with slash commands)
+            self.pending_data_loads = 10;
             self.is_loading = true;
             self.spinner.set_message("Loading data...");
 
@@ -224,8 +224,8 @@ impl App {
 
             // Load resource summary for dashboard chart (last 30 days)
             let client9 = client.clone();
-            let org9 = org;
-            let tx9 = tx;
+            let org9 = org.clone();
+            let tx9 = tx.clone();
             tokio::spawn(async move {
                 match client9.get_resource_summary(org9.as_deref(), "daily", 30).await {
                     Ok(summary) => {
@@ -236,6 +236,27 @@ impl App {
                             .send(DataLoadResult::Error(format!("Resource summary: {}", e)))
                             .await;
                     }
+                }
+            });
+
+            // Load Neo slash commands
+            let client10 = client.clone();
+            let org10 = org;
+            let tx10 = tx;
+            tokio::spawn(async move {
+                if let Some(org) = org10 {
+                    match client10.get_neo_slash_commands(&org).await {
+                        Ok(commands) => {
+                            let _ = tx10.send(DataLoadResult::NeoSlashCommands(commands)).await;
+                        }
+                        Err(e) => {
+                            log::debug!("Neo slash commands: {} (may not be available)", e);
+                            // Send empty list on error - slash commands are optional
+                            let _ = tx10.send(DataLoadResult::NeoSlashCommands(vec![])).await;
+                        }
+                    }
+                } else {
+                    let _ = tx10.send(DataLoadResult::NeoSlashCommands(vec![])).await;
                 }
             });
         }
@@ -259,6 +280,10 @@ impl App {
                 DataLoadResult::NeoTasks(tasks) => {
                     self.state.neo_tasks = tasks.clone();
                     self.neo_tasks_list.set_items(tasks);
+                }
+                DataLoadResult::NeoSlashCommands(commands) => {
+                    log::info!("Received {} Neo slash commands", commands.len());
+                    self.state.neo_slash_commands = commands;
                 }
                 DataLoadResult::Resources(resources) => {
                     self.state.resources = resources;

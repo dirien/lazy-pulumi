@@ -152,6 +152,14 @@ pub struct App {
     /// Current task is running (from task status API)
     /// Used to keep thinking indicator visible until confirmed not running
     pub(super) neo_task_is_running: bool,
+    /// Show slash command picker popup
+    pub(super) neo_show_command_picker: bool,
+    /// Filtered slash commands (based on input)
+    pub(super) neo_filtered_commands: Vec<crate::api::NeoSlashCommand>,
+    /// Selected command index in picker
+    pub(super) neo_command_picker_index: usize,
+    /// Pending slash commands that have been inserted but not yet sent
+    pub(super) neo_pending_commands: Vec<crate::api::NeoSlashCommand>,
 
     /// Channel for receiving async Neo results
     pub(super) neo_result_rx: mpsc::Receiver<NeoAsyncResult>,
@@ -292,6 +300,10 @@ impl App {
             neo_hide_task_list: false,
             show_neo_details: false,
             neo_task_is_running: false,
+            neo_show_command_picker: false,
+            neo_filtered_commands: Vec::new(),
+            neo_command_picker_index: 0,
+            neo_pending_commands: Vec::new(),
             neo_result_rx,
             neo_result_tx,
             data_result_rx,
@@ -438,6 +450,10 @@ impl App {
         let neo_scroll_state = &mut self.neo_scroll_state;
         let neo_auto_scroll = self.neo_auto_scroll.clone();
         let neo_hide_task_list = self.neo_hide_task_list;
+        let neo_show_command_picker = self.neo_show_command_picker;
+        let neo_filtered_commands = &self.neo_filtered_commands;
+        let neo_command_picker_index = self.neo_command_picker_index;
+        let neo_pending_commands = &self.neo_pending_commands;
 
         // ESC detail pane state
         let esc_pane = self.esc_pane;
@@ -533,6 +549,11 @@ impl App {
                         neo_is_thinking,
                         spinner_char,
                         neo_hide_task_list,
+                        neo_show_command_picker,
+                        neo_filtered_commands,
+                        neo_command_picker_index,
+                        &state.neo_slash_commands,
+                        neo_pending_commands,
                     );
                 }
                 Tab::Platform => {
@@ -657,10 +678,10 @@ impl App {
                 }
                 Tab::Neo => {
                     if self.neo_hide_task_list {
-                        "j/k: scroll | d: details | n: new | i: type | Esc: show tasks | q: quit"
+                        "j/k: scroll | /: commands | d: details | n: new | i: type | Esc: tasks | q: quit"
                             .to_string()
                     } else {
-                        "↑↓: tasks | Enter: select | n: new | i: type | q: quit".to_string()
+                        "↑↓: tasks | Enter: select | /: commands | n: new | i: type | q: quit".to_string()
                     }
                 }
                 Tab::Platform => {

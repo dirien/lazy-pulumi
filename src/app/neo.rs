@@ -188,11 +188,15 @@ impl App {
     }
 
     /// Send a message to Neo (non-blocking)
+    /// If pending_commands is not empty, sends as slash command payload
     pub(super) fn send_neo_message(&mut self) {
         let message = self.neo_input.take();
         if message.trim().is_empty() {
             return;
         }
+
+        // Take pending commands (they'll be sent with this message)
+        let pending_commands = std::mem::take(&mut self.neo_pending_commands);
 
         // Add user message to chat immediately
         self.state.neo_messages.push(NeoMessage {
@@ -223,9 +227,27 @@ impl App {
                 tokio::spawn(async move {
                     let result = if let Some(tid) = task_id {
                         // Continue existing task
-                        client.continue_neo_task(&org, &tid, Some(&message)).await
+                        if !pending_commands.is_empty() {
+                            // With slash commands
+                            client
+                                .continue_neo_task_with_commands(
+                                    &org,
+                                    &tid,
+                                    &message,
+                                    &pending_commands,
+                                )
+                                .await
+                        } else {
+                            // Plain message
+                            client.continue_neo_task(&org, &tid, Some(&message)).await
+                        }
+                    } else if !pending_commands.is_empty() {
+                        // Create new task with slash commands
+                        client
+                            .create_neo_task_with_commands(&org, &message, &pending_commands)
+                            .await
                     } else {
-                        // Create new task
+                        // Create new task (plain message)
                         client.create_neo_task(&org, &message).await
                     };
 
@@ -283,6 +305,82 @@ impl App {
                     self.is_loading = false;
                 }
             }
+        }
+    }
+
+    /// Update filtered commands based on current input
+    pub(super) fn update_filtered_commands(&mut self) {
+        let input = self.neo_input.value();
+
+        // Find the last '/' that might start a new command
+        // This allows typing text after an inserted command, then starting a new one
+        let last_slash_pos = input.rfind('/');
+
+        match last_slash_pos {
+            Some(pos) => {
+                // Check if there's a space after this slash (command already completed)
+                let after_slash = &input[pos + 1..];
+                if after_slash.contains(' ') {
+                    // Command is complete (has space after), hide picker
+                    self.neo_show_command_picker = false;
+                    self.neo_filtered_commands.clear();
+                    return;
+                }
+
+                // Get the filter text (everything after the last /)
+                let filter = after_slash.to_lowercase();
+
+                // Filter commands that match
+                self.neo_filtered_commands = self
+                    .state
+                    .neo_slash_commands
+                    .iter()
+                    .filter(|cmd| {
+                        cmd.name.to_lowercase().contains(&filter)
+                            || cmd.description.to_lowercase().contains(&filter)
+                    })
+                    .cloned()
+                    .collect();
+
+                // Show picker if we have matches
+                self.neo_show_command_picker = !self.neo_filtered_commands.is_empty();
+
+                // Reset selection index if out of bounds
+                if self.neo_command_picker_index >= self.neo_filtered_commands.len() {
+                    self.neo_command_picker_index = 0;
+                }
+            }
+            None => {
+                self.neo_show_command_picker = false;
+                self.neo_filtered_commands.clear();
+            }
+        }
+    }
+
+    /// Insert the selected slash command into the input (without executing)
+    pub(super) fn insert_selected_slash_command(&mut self) {
+        if let Some(cmd) = self.neo_filtered_commands.get(self.neo_command_picker_index) {
+            let current_input = self.neo_input.value().to_string();
+
+            // Find the last '/' to replace partial command
+            if let Some(last_slash_pos) = current_input.rfind('/') {
+                // Replace from the last '/' with the full command name
+                let prefix = &current_input[..last_slash_pos];
+                let new_value = format!("{}/{} ", prefix, cmd.name);
+                self.neo_input.set_value(new_value);
+
+                // Track the inserted command for later use when sending
+                self.neo_pending_commands.push(cmd.clone());
+            } else {
+                // No slash found, just set the command
+                self.neo_input.set_value(format!("/{} ", cmd.name));
+                self.neo_pending_commands.push(cmd.clone());
+            }
+
+            // Hide picker after insertion
+            self.neo_show_command_picker = false;
+            self.neo_filtered_commands.clear();
+            self.neo_command_picker_index = 0;
         }
     }
 

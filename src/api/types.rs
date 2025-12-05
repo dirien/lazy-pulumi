@@ -404,6 +404,65 @@ pub struct NeoTasksResponse {
     pub tasks: Vec<NeoTask>,
 }
 
+// ─────────────────────────────────────────────────────────────
+// Neo Slash Commands Types
+// ─────────────────────────────────────────────────────────────
+
+/// Neo Slash Command (available from /commands API)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NeoSlashCommand {
+    /// Command name (e.g., "get-started")
+    pub name: String,
+    /// Full prompt text to be sent
+    pub prompt: String,
+    /// Short description shown to user
+    pub description: String,
+    /// Whether this is a built-in command
+    #[serde(default)]
+    pub built_in: bool,
+    /// Last modified timestamp
+    #[serde(default)]
+    pub modified_at: Option<String>,
+    /// Unique tag/hash for this command version
+    #[serde(default)]
+    pub tag: Option<String>,
+}
+
+impl NeoSlashCommand {
+    /// Generate the command reference string for the API payload
+    /// Format: {{cmd:name:tag}}
+    pub fn command_reference(&self) -> String {
+        let tag = self.tag.as_deref().unwrap_or("");
+        format!("{{{{cmd:{}:{}}}}}", self.name, tag)
+    }
+}
+
+/// Message structure for creating a task (supports both plain text and commands)
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NeoCreateTaskMessage {
+    #[serde(rename = "type")]
+    pub message_type: String,
+    pub content: String,
+    pub timestamp: String,
+    /// Commands map - only present when using slash commands
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub commands: Option<std::collections::HashMap<String, NeoSlashCommandPayload>>,
+}
+
+/// Slash command data included in the payload
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NeoSlashCommandPayload {
+    pub name: String,
+    pub prompt: String,
+    pub description: String,
+    pub built_in: bool,
+    pub modified_at: String,
+    pub tag: String,
+}
+
 /// Resource search result
 #[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]

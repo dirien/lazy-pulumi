@@ -4,8 +4,8 @@
 //! including enums for tabs, focus modes, and the main application state struct.
 
 use crate::api::{
-    EscEnvironmentSummary, NeoMessage, NeoTask, OrgStackUpdate, RegistryPackage, RegistryTemplate,
-    Resource, ResourceSummaryPoint, Service, Stack,
+    EscEnvironmentSummary, NeoMessage, NeoSlashCommand, NeoTask, OrgStackUpdate, RegistryPackage,
+    RegistryTemplate, Resource, ResourceSummaryPoint, Service, Stack,
 };
 
 /// Async data loading result
@@ -14,6 +14,7 @@ pub enum DataLoadResult {
     Stacks(Vec<Stack>),
     EscEnvironments(Vec<EscEnvironmentSummary>),
     NeoTasks(Vec<NeoTask>),
+    NeoSlashCommands(Vec<NeoSlashCommand>),
     Resources(Vec<Resource>),
     Services(Vec<Service>),
     RegistryPackages(Vec<RegistryPackage>),
@@ -214,6 +215,8 @@ pub struct AppState {
     // Neo conversation
     pub neo_messages: Vec<NeoMessage>,
     pub current_task_id: Option<String>,
+    /// Available slash commands from API
+    pub neo_slash_commands: Vec<NeoSlashCommand>,
 
     // Platform data
     pub services: Vec<Service>,
@@ -239,6 +242,7 @@ impl Default for AppState {
             selected_env_values: None,
             neo_messages: Vec::new(),
             current_task_id: None,
+            neo_slash_commands: Vec::new(),
             services: Vec::new(),
             registry_packages: Vec::new(),
             registry_templates: Vec::new(),
