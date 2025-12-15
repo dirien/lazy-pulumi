@@ -8,52 +8,29 @@ project_name: lazy-pulumi
 snapshot:
   version_template: '{{ .Tag }}-SNAPSHOT'
 
-# Use prebuilt binaries (built by GitHub Actions matrix)
 builds:
   - id: lazy-pulumi
-    builder: prebuilt
-    prebuilt:
-      path: dist/lazy-pulumi_{{ .Os }}_{{ .Arch }}{{ with .Amd64 }}_{{ . }}{{ end }}/lazy-pulumi
+    builder: rust
     binary: lazy-pulumi
-    goos:
-      - linux
-      - darwin
-    goarch:
-      - amd64
-      - arm64
-    goamd64:
-      - v1
+    # Use cargo directly (not zigbuild) - builds natively on each runner
+    tool: cargo
+    command: build
+    flags:
+      - --release
+    targets:
+      - x86_64-unknown-linux-gnu
+      - aarch64-unknown-linux-gnu
+      - x86_64-apple-darwin
+      - aarch64-apple-darwin
 
 archives:
-  - format_overrides:
+  - format: tar.gz
+    format_overrides:
       - goos: windows
-        formats:
-          - zip
+        format: zip
 
 checksum:
   name_template: 'checksums.txt'
-
-universal_binaries:
-  - id: lazy-pulumi-universal
-    ids:
-      - lazy-pulumi
-    replace: true
-    name_template: lazy-pulumi
-
-homebrew_casks:
-  - name: lazy-pulumi
-    repository:
-      owner: dirien
-      name: homebrew-dirien
-      branch: main
-
-    commit_author:
-      name: dirien
-      email: engin.diri@mail.schwarz
-
-    directory: Casks
-    homepage: "https://github.com/dirien/lazy-pulumi"
-    description: "A stylish TUI for Pulumi Cloud, ESC, and NEO"
 
 changelog:
   sort: asc
@@ -74,3 +51,20 @@ changelog:
       order: 10
     - title: Other work
       order: 999
+
+# Homebrew Cask for macOS distribution
+homebrew_casks:
+  - name: lazy-pulumi
+    repository:
+      owner: dirien
+      name: homebrew-dirien
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+
+    commit_author:
+      name: dirien
+      email: engin.diri@mail.schwarz
+
+    directory: Casks
+    homepage: "https://github.com/dirien/lazy-pulumi"
+    description: "A stylish TUI for Pulumi Cloud, ESC, and NEO"
