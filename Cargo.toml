@@ -9,7 +9,7 @@ license = "MIT"
 [dependencies]
 # TUI Framework
 ratatui = { version = "0.29", features = ["unstable-rendered-line-info"] }
-crossterm = "0.28"
+crossterm = "0.29"
 tui-scrollview = "0.5"
 tui-big-text = "0.7"
 
@@ -29,11 +29,11 @@ thiserror = "2"
 
 # Utilities
 chrono = { version = "0.4", features = ["serde"] }
-directories = "5"
+directories = "6"
 urlencoding = "2"
 
 # PTY for proper terminal emulation (streaming CLI output)
-portable-pty = "0.8"
+portable-pty = "0.9"
 
 # Syntax Highlighting
 syntect = { version = "5", default-features = false, features = ["default-syntaxes", "default-themes", "regex-onig"] }
