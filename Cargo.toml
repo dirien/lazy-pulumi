@@ -17,7 +17,9 @@ tui-big-text = "0.7"
 tokio = { version = "1", features = ["full"] }
 
 # HTTP Client for Pulumi API
-reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+# Using rustls with aws-lc-rs backend for better cross-compilation support (no CoreFoundation dependency)
+reqwest = { version = "0.12", features = ["json", "rustls-tls-webpki-roots-no-provider"], default-features = false }
+rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs", "std", "tls12"] }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }

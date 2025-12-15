@@ -12,11 +12,8 @@ builds:
   - id: lazy-pulumi
     builder: rust
     binary: lazy-pulumi
-    # Use cargo directly (not zigbuild) - builds natively on each runner
-    tool: cargo
-    command: build
-    flags:
-      - --release
+    # Use cargo-zigbuild for cross-compilation (default)
+    # Now works for macOS targets since we switched from ring to aws-lc-rs
     targets:
       - x86_64-unknown-linux-gnu
       - aarch64-unknown-linux-gnu
