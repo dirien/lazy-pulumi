@@ -8,28 +8,21 @@ project_name: lazy-pulumi
 snapshot:
   version_template: '{{ .Tag }}-SNAPSHOT'
 
+# Use prebuilt binaries (built by GitHub Actions matrix)
 builds:
-  # Linux builds using cargo-zigbuild for cross-compilation
-  - id: lazy-pulumi-linux
-    builder: rust
+  - id: lazy-pulumi
+    builder: prebuilt
+    prebuilt:
+      path: dist/lazy-pulumi_{{ .Os }}_{{ .Arch }}{{ with .Amd64 }}_{{ . }}{{ end }}/lazy-pulumi
     binary: lazy-pulumi
-    command: zigbuild
-    flags:
-      - --release
-    targets:
-      - x86_64-unknown-linux-gnu
-      - aarch64-unknown-linux-gnu
-
-  # macOS builds using cargo-zigbuild
-  - id: lazy-pulumi-darwin
-    builder: rust
-    binary: lazy-pulumi
-    command: zigbuild
-    flags:
-      - --release
-    targets:
-      - aarch64-apple-darwin
-      - x86_64-apple-darwin
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    goamd64:
+      - v1
 
 archives:
   - format_overrides:
@@ -39,6 +32,13 @@ archives:
 
 checksum:
   name_template: 'checksums.txt'
+
+universal_binaries:
+  - id: lazy-pulumi-universal
+    ids:
+      - lazy-pulumi
+    replace: true
+    name_template: lazy-pulumi
 
 homebrew_casks:
   - name: lazy-pulumi
