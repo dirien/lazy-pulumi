@@ -28,27 +28,16 @@ jobs:
       - name: Test
         run: cargo test
 
-  # Build binaries on native runners using GoReleaser --single-target
-  build-binaries:
-    name: Build ${{ matrix.target }}
-    runs-on: ${{ matrix.os }}
+  release:
+    permissions:
+      contents: write
+      id-token: write
     needs: build
-    if: startsWith(github.ref, 'refs/tags/')
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-
-          - os: ubuntu-24.04-arm
-            target: aarch64-unknown-linux-gnu
-
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
-
-          - os: macos-latest
-            target: aarch64-apple-darwin
-
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+    runs-on: ubuntu-latest
+    if: success() && startsWith(github.ref, 'refs/tags/')
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -57,55 +46,24 @@ jobs:
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
 
-      - name: Run GoReleaser Build
-        uses: goreleaser/goreleaser-action@90a3faa9d0182683851fbfa97ca1a2cb983bfca3 # v6.2.1
+      - name: Install Zig
+        uses: goto-bus-stop/setup-zig@7ab2955eb728f5440978d5824358023be3a2802d # v2.2.1
         with:
-          version: latest
-          args: build --single-target --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          version: 0.13.0
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
-        with:
-          name: dist-${{ matrix.target }}
-          path: dist/
-          if-no-files-found: error
+      - name: Install cargo-zigbuild
+        run: cargo install cargo-zigbuild
 
-  release:
-    permissions:
-      contents: write
-    needs: build-binaries
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          fetch-depth: 0
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
-        with:
-          path: artifacts
-          pattern: dist-*
-          merge-multiple: true
-
-      - name: Prepare dist folder
+      - name: Add Rust targets
         run: |
-          mkdir -p dist
-          cp -r artifacts/* dist/ || true
-          find dist -type f -name "*.tar.gz" -o -name "*.zip" | head -20
-          ls -la dist/
+          rustup target add x86_64-unknown-linux-gnu
+          rustup target add aarch64-unknown-linux-gnu
+          rustup target add x86_64-apple-darwin
+          rustup target add aarch64-apple-darwin
 
-      - name: Run GoReleaser Release
+      - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@90a3faa9d0182683851fbfa97ca1a2cb983bfca3 # v6.2.1
         with:
           version: latest
-          args: release --clean --skip=build
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          args: release --clean
