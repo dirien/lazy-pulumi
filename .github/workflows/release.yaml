@@ -71,20 +71,24 @@ jobs:
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
 
+      - name: Create archive (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar czvf ../../../${{ matrix.asset_name }}.tar.gz ${{ matrix.artifact_name }}
+          cd ../../..
+
       - name: Upload binary
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
           name: ${{ matrix.asset_name }}
-          path: target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+          path: ${{ matrix.asset_name }}.tar.gz
           if-no-files-found: error
 
   release:
     permissions:
       contents: write
-      id-token: write
     needs: build-binaries
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     steps:
@@ -98,22 +102,27 @@ jobs:
         with:
           path: dist
 
-      - name: Prepare binaries for GoReleaser
+      - name: List artifacts
+        run: find dist -type f
+
+      - name: Generate checksums
         run: |
-          mkdir -p dist/lazy-pulumi_linux_amd64_v1
-          mkdir -p dist/lazy-pulumi_linux_arm64
-          mkdir -p dist/lazy-pulumi_darwin_amd64_v1
-          mkdir -p dist/lazy-pulumi_darwin_arm64
+          cd dist
+          for dir in */; do
+            for file in "$dir"*.tar.gz; do
+              if [ -f "$file" ]; then
+                sha256sum "$file" >> checksums.txt
+              fi
+            done
+          done
+          cat checksums.txt
 
-          cp dist/lazy-pulumi-linux-amd64/lazy-pulumi dist/lazy-pulumi_linux_amd64_v1/
-          cp dist/lazy-pulumi-linux-arm64/lazy-pulumi dist/lazy-pulumi_linux_arm64/
-          cp dist/lazy-pulumi-darwin-amd64/lazy-pulumi dist/lazy-pulumi_darwin_amd64_v1/
-          cp dist/lazy-pulumi-darwin-arm64/lazy-pulumi dist/lazy-pulumi_darwin_arm64/
-
-          chmod +x dist/lazy-pulumi_*/lazy-pulumi
-
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@90a3faa9d0182683851fbfa97ca1a2cb983bfca3 # v6.2.1
+      - name: Create Release
+        uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
         with:
-          version: latest
-          args: release --clean
+          files: |
+            dist/*/*.tar.gz
+            dist/checksums.txt
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
