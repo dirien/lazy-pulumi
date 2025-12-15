@@ -36,7 +36,16 @@ export PULUMI_ORG="your-org-name"
 export PULUMI_API_URL="https://api.pulumi.com"
 ```
 
-## Build & Run
+## Installation
+
+### Homebrew (macOS/Linux)
+
+```bash
+brew tap dirien/dirien
+brew install lazy-pulumi
+```
+
+### From Source
 
 ```bash
 # Build
@@ -48,6 +57,10 @@ cargo run --release
 # Run with debug logging
 RUST_LOG=debug cargo run --release
 ```
+
+### From Releases
+
+Download the latest binary from the [GitHub Releases](https://github.com/dirien/lazy-pulumi/releases) page.
 
 ## Logging
 
