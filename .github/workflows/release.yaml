@@ -62,7 +62,7 @@ jobs:
 
       - name: Setup macOS SDK
         run: |
-          wget https://github.com/joseluisq/macos-sdk/releases/download/v12.3/MacOSX12.3.sdk.tar.xz
+          wget https://github.com/joseluisq/macosx-sdks/releases/download/v12.3/MacOSX12.3.sdk.tar.xz
           tar -xf MacOSX12.3.sdk.tar.xz
 
       - name: Run GoReleaser
