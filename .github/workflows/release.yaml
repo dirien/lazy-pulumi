@@ -60,8 +60,16 @@ jobs:
           rustup target add x86_64-apple-darwin
           rustup target add aarch64-apple-darwin
 
+      - name: Setup macOS SDK
+        run: |
+          wget https://github.com/joseluisq/macos-sdk/releases/download/v12.3/MacOSX12.3.sdk.tar.xz
+          tar -xf MacOSX12.3.sdk.tar.xz
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@90a3faa9d0182683851fbfa97ca1a2cb983bfca3 # v6.2.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+          SDKROOT: ${{ github.workspace }}/MacOSX12.3.sdk
         with:
           version: latest
           args: release --clean --snapshot
