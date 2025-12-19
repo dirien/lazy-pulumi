@@ -24,7 +24,7 @@ builds:
   - id: lazy-pulumi-darwin
     builder: rust
     binary: lazy-pulumi
-    command: cargo
+    command: build
     flags:
       - --release
     targets:
