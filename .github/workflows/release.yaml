@@ -67,3 +67,9 @@ jobs:
           args: release --clean --snapshot
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
