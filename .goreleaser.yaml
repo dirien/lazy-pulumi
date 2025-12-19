@@ -20,11 +20,11 @@ builds:
       - x86_64-unknown-linux-gnu
       - aarch64-unknown-linux-gnu
 
-  # macOS builds using cargo-zigbuild
+  # macOS builds using cargo (native)
   - id: lazy-pulumi-darwin
     builder: rust
     binary: lazy-pulumi
-    command: zigbuild
+    command: cargo
     flags:
       - --release
     targets:
