@@ -28,17 +28,14 @@ jobs:
       - name: Test
         run: cargo test
 
-  prepare:
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            id: lazy-pulumi-linux
-            target: linux
-          - os: macos-latest
-            id: lazy-pulumi-darwin
-            target: darwin
-    runs-on: ${{ matrix.os }}
+  release:
+    permissions:
+      contents: write
+      id-token: write
+    needs: build
+    env:
+      GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+    runs-on: macos-latest
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -49,53 +46,24 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install Zig
-        if: matrix.os == 'ubuntu-latest'
         uses: goto-bus-stop/setup-zig@7ab2955eb728f5440978d5824358023be3a2802d # v2.2.1
         with:
           version: 0.13.0
 
       - name: Install cargo-zigbuild
-        if: matrix.os == 'ubuntu-latest'
         run: cargo install cargo-zigbuild
 
-      - name: Run GoReleaser (Split Build)
+      - name: Add Rust targets
+        run: |
+          rustup target add x86_64-unknown-linux-gnu
+          rustup target add aarch64-unknown-linux-gnu
+          rustup target add x86_64-apple-darwin
+          rustup target add aarch64-apple-darwin
+
+      - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@90a3faa9d0182683851fbfa97ca1a2cb983bfca3 # v6.2.1
         with:
           version: latest
-          args: release --clean --split --id ${{ matrix.id }} --snapshot
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
-
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: artifacts-${{ matrix.target }}
-          path: dist/**/*
-          if-no-files-found: error
-
-  release:
-    needs: prepare
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      id-token: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          fetch-depth: 0
-
-      - name: Download Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: artifacts-*
-          merge-multiple: true
-          path: dist
-
-      - name: Run GoReleaser (Merge & Release)
-        uses: goreleaser/goreleaser-action@90a3faa9d0182683851fbfa97ca1a2cb983bfca3 # v6.2.1
-        with:
-          version: latest
-          args: release --clean --merge --snapshot
+          args: release --clean --snapshot
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
