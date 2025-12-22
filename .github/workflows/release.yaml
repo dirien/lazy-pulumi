@@ -28,31 +28,14 @@ jobs:
       - name: Test
         run: cargo test
 
-  # Build binaries on native runners for each platform
-  build-binaries:
-    name: Build ${{ matrix.target }}
-    runs-on: ${{ matrix.os }}
+  release:
+    permissions:
+      contents: write
+      id-token: write
     needs: build
-    if: startsWith(github.ref, 'refs/tags/')
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            asset_name: lazy-pulumi-linux-amd64
-
-          - os: ubuntu-24.04-arm
-            target: aarch64-unknown-linux-gnu
-            asset_name: lazy-pulumi-linux-arm64
-
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
-            asset_name: lazy-pulumi-darwin-amd64
-
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            asset_name: lazy-pulumi-darwin-arm64
-
+    env:
+      GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+    runs-on: macos-latest
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -61,120 +44,32 @@ jobs:
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Zig
+        uses: goto-bus-stop/setup-zig@7ab2955eb728f5440978d5824358023be3a2802d # v2.2.1
         with:
-          targets: ${{ matrix.target }}
+          version: 0.13.0
 
-      - name: Build
-        run: cargo build --release --target ${{ matrix.target }}
+      - name: Install cargo-zigbuild
+        run: cargo install cargo-zigbuild
 
-      - name: Create archive
+      - name: Add Rust targets
         run: |
-          cd target/${{ matrix.target }}/release
-          tar czvf ../../../${{ matrix.asset_name }}.tar.gz lazy-pulumi
+          rustup target add x86_64-unknown-linux-gnu
+          rustup target add aarch64-unknown-linux-gnu
+          rustup target add x86_64-apple-darwin
+          rustup target add aarch64-apple-darwin
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@90a3faa9d0182683851fbfa97ca1a2cb983bfca3 # v6.2.1
         with:
-          name: ${{ matrix.asset_name }}
-          path: ${{ matrix.asset_name }}.tar.gz
-          if-no-files-found: error
-
-  release:
-    permissions:
-      contents: write
-    needs: build-binaries
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          fetch-depth: 0
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
-        with:
-          path: artifacts
-
-      - name: Prepare release assets
-        run: |
-          mkdir -p release
-          find artifacts -name "*.tar.gz" -exec mv {} release/ \;
-          cd release
-          sha256sum *.tar.gz > checksums.txt
-          ls -la
-
-      - name: Create Release
-        uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
-        with:
-          files: |
-            release/*.tar.gz
-            release/checksums.txt
-          generate_release_notes: true
+          version: latest
+          args: release --clean --snapshot
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
 
-  homebrew:
-    needs: release
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-    permissions:
-      contents: write
-    steps:
-      - name: Get version
-        id: version
-        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
-      - name: Checkout homebrew tap
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
         with:
-          repository: dirien/homebrew-dirien
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          path: homebrew-tap
-
-      - name: Download checksums
-        run: |
-          curl -sL "https://github.com/dirien/lazy-pulumi/releases/download/${{ steps.version.outputs.version }}/checksums.txt" -o checksums.txt
-          cat checksums.txt
-
-      - name: Update Homebrew Cask
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          VERSION_NO_V="${VERSION#v}"
-
-          # Get SHA256 for arm64 (primary for Apple Silicon)
-          SHA256_ARM64=$(grep "darwin-arm64" checksums.txt | awk '{print $1}')
-          SHA256_AMD64=$(grep "darwin-amd64" checksums.txt | awk '{print $1}')
-
-          cat > homebrew-tap/Casks/lazy-pulumi.rb << EOF
-          cask "lazy-pulumi" do
-            version "${VERSION_NO_V}"
-
-            on_arm do
-              sha256 "${SHA256_ARM64}"
-              url "https://github.com/dirien/lazy-pulumi/releases/download/v#{version}/lazy-pulumi-darwin-arm64.tar.gz"
-            end
-
-            on_intel do
-              sha256 "${SHA256_AMD64}"
-              url "https://github.com/dirien/lazy-pulumi/releases/download/v#{version}/lazy-pulumi-darwin-amd64.tar.gz"
-            end
-
-            name "lazy-pulumi"
-            desc "A stylish TUI for Pulumi Cloud, ESC, and NEO"
-            homepage "https://github.com/dirien/lazy-pulumi"
-
-            binary "lazy-pulumi"
-          end
-          EOF
-
-          cat homebrew-tap/Casks/lazy-pulumi.rb
-
-      - name: Commit and push
-        run: |
-          cd homebrew-tap
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Casks/lazy-pulumi.rb
-          git commit -m "Update lazy-pulumi to ${{ steps.version.outputs.version }}" || echo "No changes to commit"
-          git push
+          name: dist
+          path: dist/
