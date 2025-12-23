@@ -739,15 +739,17 @@ impl CommandExecution {
         }
     }
 
-    /// Get the working directory if specified (cwd parameter is handled separately)
+    /// Get the working directory (defaults to current directory if empty or unspecified)
     pub fn get_working_directory(&self) -> Option<String> {
-        self.param_values.get("cwd").and_then(|v| {
-            if v.is_empty() {
-                None
-            } else {
-                Some(v.clone())
-            }
-        })
+        self.param_values
+            .get("cwd")
+            .filter(|v| !v.is_empty())
+            .map(|v| v.clone())
+            .or_else(|| {
+                std::env::current_dir()
+                    .ok()
+                    .and_then(|p| p.to_str().map(|s| s.to_string()))
+            })
     }
 
     /// Build the full command line arguments
