@@ -69,7 +69,7 @@ Download the latest binary from the [GitHub Releases](https://github.com/dirien/
 To update to the latest version via Homebrew:
 
 ```bash
-brew update && brew upgrade --cask lazy-pulumi
+brew update && brew upgrade lazy-pulumi
 ```
 
 Or update all Homebrew packages including lazy-pulumi:
@@ -78,8 +78,13 @@ Or update all Homebrew packages including lazy-pulumi:
 brew update && brew upgrade
 ```
 
-> [!NOTE]
-> Since `lazy-pulumi` is distributed as a Cask from a third-party tap, running `brew update` first is required to refresh the tap metadata before upgrading.
+> [!IMPORTANT]
+> **Migrating from Cask to Formula**: Starting with version 0.5.0, `lazy-pulumi` is distributed as a Homebrew Formula instead of a Cask. If you installed a previous version via Cask, you need to uninstall it first:
+> ```bash
+> brew uninstall --cask lazy-pulumi
+> brew install dirien/dirien/lazy-pulumi
+> ```
+> This change ensures `brew upgrade` works as expected without needing extra flags.
 
 ## Logging
 
