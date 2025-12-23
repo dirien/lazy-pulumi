@@ -16,8 +16,11 @@ use std::sync::OnceLock;
 use crate::startup::{CheckStatus, StartupChecks};
 use crate::theme::Theme;
 
-/// Application version from Cargo.toml
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+/// Application version - uses GoReleaser injected version if available, otherwise falls back to Cargo.toml version
+const VERSION: &str = match option_env!("APP_VERSION") {
+    Some(v) => v,
+    None => env!("CARGO_PKG_VERSION"),
+};
 
 /// Cached original image
 static IMAGE_CACHE: OnceLock<DynamicImage> = OnceLock::new();
