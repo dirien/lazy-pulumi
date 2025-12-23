@@ -48,7 +48,7 @@ archives:
 checksum:
   name_template: 'checksums.txt'
 
-homebrew_casks:
+brews:
   - name: lazy-pulumi
     repository:
       owner: dirien
@@ -59,9 +59,12 @@ homebrew_casks:
       name: dirien
       email: engin.diri@mail.schwarz
 
-    directory: Casks
+    directory: Formula
     homepage: "https://github.com/dirien/lazy-pulumi"
     description: "A stylish TUI for Pulumi Cloud, ESC, and NEO"
+    license: "MIT"
+    install: |
+      bin.install "lazy-pulumi"
 
 changelog:
   sort: asc
