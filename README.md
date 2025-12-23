@@ -62,6 +62,25 @@ RUST_LOG=debug cargo run --release
 
 Download the latest binary from the [GitHub Releases](https://github.com/dirien/lazy-pulumi/releases) page.
 
+## Updating
+
+### Homebrew
+
+To update to the latest version via Homebrew:
+
+```bash
+brew update && brew upgrade --cask lazy-pulumi
+```
+
+Or update all Homebrew packages including lazy-pulumi:
+
+```bash
+brew update && brew upgrade
+```
+
+> [!NOTE]
+> Since `lazy-pulumi` is distributed as a Cask from a third-party tap, running `brew update` first is required to refresh the tap metadata before upgrading.
+
 ## Logging
 
 Logs are written to a file to avoid interfering with the TUI:
