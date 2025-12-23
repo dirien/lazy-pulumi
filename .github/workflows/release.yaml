@@ -6,7 +6,13 @@ on:
       - '*'
     tags:
       - '*'
+    paths-ignore:
+      - '**.md'
+      - '.github/workflows/**'
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - '.github/workflows/**'
 
 permissions: read-all
 
