@@ -78,14 +78,6 @@ Or update all Homebrew packages including lazy-pulumi:
 brew update && brew upgrade
 ```
 
-> [!IMPORTANT]
-> **Migrating from Cask to Formula**: Starting with version 0.5.0, `lazy-pulumi` is distributed as a Homebrew Formula instead of a Cask. If you installed a previous version via Cask, you need to uninstall it first:
-> ```bash
-> brew uninstall --cask lazy-pulumi
-> brew install dirien/dirien/lazy-pulumi
-> ```
-> This change ensures `brew upgrade` works as expected without needing extra flags.
-
 ## Logging
 
 Logs are written to a file to avoid interfering with the TUI:
