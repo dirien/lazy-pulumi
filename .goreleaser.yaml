@@ -19,6 +19,10 @@ builds:
     targets:
       - x86_64-unknown-linux-gnu
       - aarch64-unknown-linux-gnu
+    env:
+      - VERSION={{ .Version }}
+      - GIT_COMMIT={{ .Commit }}
+      - BUILD_DATE={{ .Date }}
 
   # macOS builds using cargo (native)
   - id: lazy-pulumi-darwin
@@ -30,6 +34,10 @@ builds:
     targets:
       - aarch64-apple-darwin
       - x86_64-apple-darwin
+    env:
+      - VERSION={{ .Version }}
+      - GIT_COMMIT={{ .Commit }}
+      - BUILD_DATE={{ .Date }}
 
 archives:
   - format_overrides:
