@@ -7,21 +7,47 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     prelude::*,
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, Wrap},
+    widgets::{
+        Block, Borders, Clear, List, ListItem, Paragraph, Scrollbar, ScrollbarOrientation,
+        ScrollbarState, Wrap,
+    },
 };
 use tui_scrollview::ScrollViewState;
 
 use crate::commands::{
-    CommandCategory, CommandExecution, CommandExecutionState, ExecutionMode,
-    PulumiCommand, commands_by_category,
+    commands_by_category, CommandCategory, CommandExecution, CommandExecutionState, ExecutionMode,
+    PulumiCommand,
 };
 use crate::components::{StatefulList, TextInput};
 use crate::theme::{symbols, Theme};
 
+/// Props for rendering the commands view
+pub struct CommandsViewProps<'a> {
+    pub view_state: CommandsViewState,
+    pub category_list: &'a mut StatefulList<CommandCategory>,
+    pub command_list: &'a mut StatefulList<&'static PulumiCommand>,
+    pub current_execution: Option<&'a CommandExecution>,
+    pub param_inputs: &'a [TextInput],
+    pub param_focus_index: usize,
+    pub output_scroll: &'a mut ScrollViewState,
+    pub filter_input: &'a TextInput,
+    pub is_filtering: bool,
+}
+
+/// Props for rendering the sidebar
+struct SidebarProps<'a> {
+    view_state: CommandsViewState,
+    category_list: &'a mut StatefulList<CommandCategory>,
+    command_list: &'a mut StatefulList<&'static PulumiCommand>,
+    filter_input: &'a TextInput,
+    is_filtering: bool,
+}
+
 /// State for the commands view
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CommandsViewState {
     /// Browsing categories
+    #[default]
     BrowsingCategories,
     /// Browsing commands in a category
     BrowsingCommands,
@@ -33,26 +59,12 @@ pub enum CommandsViewState {
     OutputView,
 }
 
-impl Default for CommandsViewState {
-    fn default() -> Self {
-        Self::BrowsingCategories
-    }
-}
-
 /// Render the commands view
 pub fn render_commands_view(
     frame: &mut Frame,
     theme: &Theme,
     area: Rect,
-    view_state: CommandsViewState,
-    category_list: &mut StatefulList<CommandCategory>,
-    command_list: &mut StatefulList<&'static PulumiCommand>,
-    current_execution: Option<&CommandExecution>,
-    param_inputs: &[TextInput],
-    param_focus_index: usize,
-    output_scroll: &mut ScrollViewState,
-    filter_input: &TextInput,
-    is_filtering: bool,
+    props: CommandsViewProps<'_>,
 ) {
     // Main layout: left sidebar for categories/commands, right for details/output
     let main_chunks = Layout::default()
@@ -65,11 +77,13 @@ pub fn render_commands_view(
         frame,
         theme,
         main_chunks[0],
-        view_state,
-        category_list,
-        command_list,
-        filter_input,
-        is_filtering,
+        SidebarProps {
+            view_state: props.view_state,
+            category_list: props.category_list,
+            command_list: props.command_list,
+            filter_input: props.filter_input,
+            is_filtering: props.is_filtering,
+        },
     );
 
     // Right panel: command details or output
@@ -77,48 +91,51 @@ pub fn render_commands_view(
         frame,
         theme,
         main_chunks[1],
-        view_state,
-        command_list.selected().copied(),
-        current_execution,
-        output_scroll,
+        props.view_state,
+        props.command_list.selected().copied(),
+        props.current_execution,
+        props.output_scroll,
     );
 
     // Overlay dialogs
-    if view_state == CommandsViewState::InputDialog {
-        if let Some(exec) = current_execution {
-            render_input_dialog(frame, theme, exec, param_inputs, param_focus_index);
+    if props.view_state == CommandsViewState::InputDialog {
+        if let Some(exec) = props.current_execution {
+            render_input_dialog(
+                frame,
+                theme,
+                exec,
+                props.param_inputs,
+                props.param_focus_index,
+            );
         }
     }
 
-    if view_state == CommandsViewState::ConfirmDialog {
-        if let Some(exec) = current_execution {
+    if props.view_state == CommandsViewState::ConfirmDialog {
+        if let Some(exec) = props.current_execution {
             render_confirm_dialog(frame, theme, exec);
         }
     }
 }
 
 /// Render the left sidebar with categories and commands
-fn render_sidebar(
-    frame: &mut Frame,
-    theme: &Theme,
-    area: Rect,
-    view_state: CommandsViewState,
-    category_list: &mut StatefulList<CommandCategory>,
-    command_list: &mut StatefulList<&'static PulumiCommand>,
-    filter_input: &TextInput,
-    is_filtering: bool,
-) {
+fn render_sidebar(frame: &mut Frame, theme: &Theme, area: Rect, props: SidebarProps<'_>) {
     // Split into filter input and lists
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // Filter/search
-            Constraint::Min(5),     // Lists
+            Constraint::Length(3), // Filter/search
+            Constraint::Min(5),    // Lists
         ])
         .split(area);
 
     // Filter/search input
-    render_filter_input(frame, theme, chunks[0], filter_input, is_filtering);
+    render_filter_input(
+        frame,
+        theme,
+        chunks[0],
+        props.filter_input,
+        props.is_filtering,
+    );
 
     // Categories and commands in a vertical split
     let list_chunks = Layout::default()
@@ -127,10 +144,22 @@ fn render_sidebar(
         .split(chunks[1]);
 
     // Categories list
-    render_categories_list(frame, theme, list_chunks[0], category_list, view_state);
+    render_categories_list(
+        frame,
+        theme,
+        list_chunks[0],
+        props.category_list,
+        props.view_state,
+    );
 
     // Commands list
-    render_commands_list(frame, theme, list_chunks[1], command_list, view_state);
+    render_commands_list(
+        frame,
+        theme,
+        list_chunks[1],
+        props.command_list,
+        props.view_state,
+    );
 }
 
 /// Render the filter input
@@ -151,7 +180,11 @@ fn render_filter_input(
         .borders(Borders::ALL)
         .border_style(border_style)
         .title(" / Search ")
-        .title_style(if is_focused { theme.title() } else { theme.subtitle() });
+        .title_style(if is_focused {
+            theme.title()
+        } else {
+            theme.subtitle()
+        });
 
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -211,7 +244,14 @@ fn render_categories_list(
                 Span::styled(prefix, theme.primary()),
                 Span::styled(cat.icon(), theme.accent()),
                 Span::styled(" ", theme.text()),
-                Span::styled(cat.title(), if is_selected && is_focused { theme.primary() } else { theme.text() }),
+                Span::styled(
+                    cat.title(),
+                    if is_selected && is_focused {
+                        theme.primary()
+                    } else {
+                        theme.text()
+                    },
+                ),
                 Span::styled(format!(" ({})", cmd_count), theme.text_muted()),
             ]);
 
@@ -231,7 +271,11 @@ fn render_categories_list(
                 .borders(Borders::ALL)
                 .border_style(border_style)
                 .title(" Categories ")
-                .title_style(if is_focused { theme.title() } else { theme.subtitle() }),
+                .title_style(if is_focused {
+                    theme.title()
+                } else {
+                    theme.subtitle()
+                }),
         )
         .highlight_style(theme.selected())
         .highlight_symbol("");
@@ -264,7 +308,8 @@ fn render_commands_list(
             };
 
             // Shortcut hint
-            let shortcut = cmd.shortcut
+            let shortcut = cmd
+                .shortcut
                 .map(|c| format!("[{}] ", c))
                 .unwrap_or_default();
 
@@ -278,7 +323,14 @@ fn render_commands_list(
             let content = Line::from(vec![
                 Span::styled(prefix, theme.primary()),
                 Span::styled(shortcut, theme.accent()),
-                Span::styled(cmd.name, if is_selected && is_focused { theme.primary() } else { theme.text() }),
+                Span::styled(
+                    cmd.name,
+                    if is_selected && is_focused {
+                        theme.primary()
+                    } else {
+                        theme.text()
+                    },
+                ),
                 Span::styled(" ", theme.text()),
                 Span::styled(mode_indicator, theme.text_muted()),
             ]);
@@ -299,7 +351,11 @@ fn render_commands_list(
                 .borders(Borders::ALL)
                 .border_style(border_style)
                 .title(" Commands ")
-                .title_style(if is_focused { theme.title() } else { theme.subtitle() }),
+                .title_style(if is_focused {
+                    theme.title()
+                } else {
+                    theme.subtitle()
+                }),
         )
         .highlight_style(theme.selected())
         .highlight_symbol("");
@@ -350,9 +406,9 @@ fn render_command_details(
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
-                    Constraint::Length(6),  // Header info
-                    Constraint::Length(2),  // Separator
-                    Constraint::Min(5),     // Parameters
+                    Constraint::Length(6), // Header info
+                    Constraint::Length(2), // Separator
+                    Constraint::Min(5),    // Parameters
                 ])
                 .split(inner);
 
@@ -390,8 +446,14 @@ fn render_command_details(
 
             // Separator
             let sep = Paragraph::new(Line::from(vec![
-                Span::styled(format!("{} Parameters ", symbols::HORIZONTAL.repeat(3)), theme.text_muted()),
-                Span::styled(symbols::HORIZONTAL.repeat(chunks[1].width.saturating_sub(15) as usize), theme.text_muted()),
+                Span::styled(
+                    format!("{} Parameters ", symbols::HORIZONTAL.repeat(3)),
+                    theme.text_muted(),
+                ),
+                Span::styled(
+                    symbols::HORIZONTAL.repeat(chunks[1].width.saturating_sub(15) as usize),
+                    theme.text_muted(),
+                ),
             ]));
             frame.render_widget(sep, chunks[1]);
 
@@ -402,23 +464,27 @@ fn render_command_details(
                     .alignment(Alignment::Center);
                 frame.render_widget(no_params, chunks[2]);
             } else {
-                let param_lines: Vec<Line> = cmd.params.iter().map(|p| {
-                    let flag_str = match (p.short, p.long) {
-                        (Some(s), Some(l)) => format!("{}, {}", s, l),
-                        (Some(s), None) => s.to_string(),
-                        (None, Some(l)) => l.to_string(),
-                        (None, None) => "<positional>".to_string(),
-                    };
+                let param_lines: Vec<Line> = cmd
+                    .params
+                    .iter()
+                    .map(|p| {
+                        let flag_str = match (p.short, p.long) {
+                            (Some(s), Some(l)) => format!("{}, {}", s, l),
+                            (Some(s), None) => s.to_string(),
+                            (None, Some(l)) => l.to_string(),
+                            (None, None) => "<positional>".to_string(),
+                        };
 
-                    let required_str = if p.required { "*" } else { " " };
+                        let required_str = if p.required { "*" } else { " " };
 
-                    Line::from(vec![
-                        Span::styled(required_str, theme.error()),
-                        Span::styled(format!("{:<20}", p.name), theme.primary()),
-                        Span::styled(format!("{:<15}", flag_str), theme.text_muted()),
-                        Span::styled(p.description, theme.text()),
-                    ])
-                }).collect();
+                        Line::from(vec![
+                            Span::styled(required_str, theme.error()),
+                            Span::styled(format!("{:<20}", p.name), theme.primary()),
+                            Span::styled(format!("{:<15}", flag_str), theme.text_muted()),
+                            Span::styled(p.description, theme.text()),
+                        ])
+                    })
+                    .collect();
 
                 let params = Paragraph::new(param_lines);
                 frame.render_widget(params, chunks[2]);
@@ -465,9 +531,9 @@ fn render_output_view(
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(4),  // Header with command info
-            Constraint::Min(5),     // Output area
-            Constraint::Length(1),  // Status bar
+            Constraint::Length(4), // Header with command info
+            Constraint::Min(5),    // Output area
+            Constraint::Length(1), // Status bar
         ])
         .split(area);
 
@@ -481,7 +547,9 @@ fn render_output_view(
 
     let status_text = match &execution.state {
         CommandExecutionState::Running => "Running...".to_string(),
-        CommandExecutionState::Completed => format!("Completed (exit: {})", execution.exit_code.unwrap_or(0)),
+        CommandExecutionState::Completed => {
+            format!("Completed (exit: {})", execution.exit_code.unwrap_or(0))
+        }
         CommandExecutionState::Failed(e) => format!("Failed: {}", e),
         _ => "".to_string(),
     };
@@ -518,15 +586,19 @@ fn render_output_view(
     frame.render_widget(output_block, chunks[1]);
 
     // Render output lines
-    let output_lines: Vec<Line> = execution.output_lines.iter().map(|line| {
-        let style = if line.is_error {
-            theme.error()
-        } else {
-            // Color code based on content for Pulumi output
-            colorize_pulumi_output(&line.text, theme)
-        };
-        Line::styled(&line.text, style)
-    }).collect();
+    let output_lines: Vec<Line> = execution
+        .output_lines
+        .iter()
+        .map(|line| {
+            let style = if line.is_error {
+                theme.error()
+            } else {
+                // Color code based on content for Pulumi output
+                colorize_pulumi_output(&line.text, theme)
+            };
+            Line::styled(&line.text, style)
+        })
+        .collect();
 
     // Calculate visible area and scroll
     let visible_height = output_inner.height as usize;
@@ -554,19 +626,26 @@ fn render_output_view(
             .begin_symbol(Some("^"))
             .end_symbol(Some("v"));
 
-        let mut scrollbar_state = ScrollbarState::new(total_lines)
-            .position(scroll_offset);
+        let mut scrollbar_state = ScrollbarState::new(total_lines).position(scroll_offset);
 
         frame.render_stateful_widget(
             scrollbar,
-            chunks[1].inner(Margin { vertical: 1, horizontal: 0 }),
+            chunks[1].inner(Margin {
+                vertical: 1,
+                horizontal: 0,
+            }),
             &mut scrollbar_state,
         );
     }
 
     // Status bar with scroll hints
     let scroll_hint = if total_lines > visible_height {
-        format!(" | Line {}-{}/{}", scroll_offset + 1, (scroll_offset + visible_height).min(total_lines), total_lines)
+        format!(
+            " | Line {}-{}/{}",
+            scroll_offset + 1,
+            (scroll_offset + visible_height).min(total_lines),
+            total_lines
+        )
     } else {
         String::new()
     };
@@ -585,16 +664,19 @@ fn render_output_view(
 }
 
 /// Colorize Pulumi output based on content
-fn colorize_pulumi_output<'a>(text: &'a str, theme: &Theme) -> Style {
+fn colorize_pulumi_output(text: &str, theme: &Theme) -> Style {
     let lower = text.to_lowercase();
 
     if lower.contains("error") || lower.contains("failed") {
         theme.error()
-    } else if lower.contains("warning") || lower.contains("warn") {
+    } else if lower.contains("warning")
+        || lower.contains("warn")
+        || lower.contains("creating")
+        || lower.contains("updating")
+    {
         theme.warning()
-    } else if lower.contains("creating") || lower.contains("updating") {
-        theme.warning()
-    } else if lower.contains("created") || lower.contains("updated") || lower.contains("succeeded") {
+    } else if lower.contains("created") || lower.contains("updated") || lower.contains("succeeded")
+    {
         theme.success()
     } else if lower.contains("deleting") {
         theme.error()
@@ -639,8 +721,8 @@ fn render_input_dialog(
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Min(5),     // Parameters
-            Constraint::Length(3),  // Buttons
+            Constraint::Min(5),    // Parameters
+            Constraint::Length(3), // Buttons
         ])
         .split(inner);
 
@@ -674,7 +756,14 @@ fn render_input_dialog(
             let required_marker = if param.required { "*" } else { " " };
             let label = Line::from(vec![
                 Span::styled(required_marker, theme.error()),
-                Span::styled(param.name, if is_focused { theme.primary() } else { theme.text() }),
+                Span::styled(
+                    param.name,
+                    if is_focused {
+                        theme.primary()
+                    } else {
+                        theme.text()
+                    },
+                ),
                 Span::styled(": ", theme.text_muted()),
                 Span::styled(param.description, theme.text_muted()),
             ]);
@@ -752,11 +841,7 @@ fn render_input_dialog(
 }
 
 /// Render the confirmation dialog
-fn render_confirm_dialog(
-    frame: &mut Frame,
-    theme: &Theme,
-    execution: &CommandExecution,
-) {
+fn render_confirm_dialog(frame: &mut Frame, theme: &Theme, execution: &CommandExecution) {
     let area = centered_rect(50, 30, frame.area());
     frame.render_widget(Clear, area);
 
@@ -772,9 +857,9 @@ fn render_confirm_dialog(
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Min(3),     // Message
-            Constraint::Length(3),  // Command preview
-            Constraint::Length(2),  // Buttons
+            Constraint::Min(3),    // Message
+            Constraint::Length(3), // Command preview
+            Constraint::Length(2), // Buttons
         ])
         .split(inner);
 

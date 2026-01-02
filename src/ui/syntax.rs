@@ -16,16 +16,9 @@ static THEME_SET: Lazy<ThemeSet> = Lazy::new(ThemeSet::load_defaults);
 
 /// Convert syntect style to ratatui style with owned content
 fn syntect_to_ratatui_span(style: SyntectStyle, content: &str) -> Span<'static> {
-    let fg = ratatui::style::Color::Rgb(
-        style.foreground.r,
-        style.foreground.g,
-        style.foreground.b,
-    );
+    let fg = ratatui::style::Color::Rgb(style.foreground.r, style.foreground.g, style.foreground.b);
 
-    Span::styled(
-        content.to_string(),
-        RatatuiStyle::default().fg(fg),
-    )
+    Span::styled(content.to_string(), RatatuiStyle::default().fg(fg))
 }
 
 /// Highlight YAML content and return ratatui Lines
@@ -40,7 +33,8 @@ pub fn highlight_yaml(content: &str) -> Vec<Line<'static>> {
         .themes
         .get("base16-ocean.dark")
         .or_else(|| THEME_SET.themes.get("base16-eighties.dark"))
-        .unwrap_or_else(|| THEME_SET.themes.values().next().unwrap());
+        .or_else(|| THEME_SET.themes.values().next())
+        .expect("syntect default themes should include at least one theme");
 
     let mut highlighter = HighlightLines::new(syntax, theme);
     let mut lines = Vec::new();
@@ -75,7 +69,8 @@ pub fn highlight_json(content: &str) -> Vec<Line<'static>> {
         .themes
         .get("base16-ocean.dark")
         .or_else(|| THEME_SET.themes.get("base16-eighties.dark"))
-        .unwrap_or_else(|| THEME_SET.themes.values().next().unwrap());
+        .or_else(|| THEME_SET.themes.values().next())
+        .expect("syntect default themes should include at least one theme");
 
     let mut highlighter = HighlightLines::new(syntax, theme);
     let mut lines = Vec::new();

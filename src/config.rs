@@ -20,9 +20,7 @@ fn default_show_splash() -> bool {
 
 impl Default for Config {
     fn default() -> Self {
-        Self {
-            show_splash: true,
-        }
+        Self { show_splash: true }
     }
 }
 
@@ -44,14 +42,12 @@ impl Config {
 
         if path.exists() {
             match fs::read_to_string(&path) {
-                Ok(contents) => {
-                    match serde_json::from_str(&contents) {
-                        Ok(config) => return config,
-                        Err(e) => {
-                            log::warn!("Failed to parse config: {}", e);
-                        }
+                Ok(contents) => match serde_json::from_str(&contents) {
+                    Ok(config) => return config,
+                    Err(e) => {
+                        log::warn!("Failed to parse config: {}", e);
                     }
-                }
+                },
                 Err(e) => {
                     log::warn!("Failed to read config: {}", e);
                 }

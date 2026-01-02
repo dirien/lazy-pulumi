@@ -118,9 +118,7 @@ impl App {
                         let _ = tx2.send(DataLoadResult::EscEnvironments(envs)).await;
                     }
                     Err(e) => {
-                        let _ = tx2
-                            .send(DataLoadResult::Error(format!("ESC: {}", e)))
-                            .await;
+                        let _ = tx2.send(DataLoadResult::Error(format!("ESC: {}", e))).await;
                     }
                 }
             });
@@ -134,9 +132,7 @@ impl App {
                         let _ = tx3.send(DataLoadResult::NeoTasks(tasks)).await;
                     }
                     Err(e) => {
-                        let _ = tx3
-                            .send(DataLoadResult::Error(format!("Neo: {}", e)))
-                            .await;
+                        let _ = tx3.send(DataLoadResult::Error(format!("Neo: {}", e))).await;
                     }
                 }
             });
@@ -227,7 +223,10 @@ impl App {
             let org9 = org.clone();
             let tx9 = tx.clone();
             tokio::spawn(async move {
-                match client9.get_resource_summary(org9.as_deref(), "daily", 30).await {
+                match client9
+                    .get_resource_summary(org9.as_deref(), "daily", 30)
+                    .await
+                {
                     Ok(summary) => {
                         let _ = tx9.send(DataLoadResult::ResourceSummary(summary)).await;
                     }

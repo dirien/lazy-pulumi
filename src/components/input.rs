@@ -1,7 +1,7 @@
 //! Text input component
 
-use crossterm::event::KeyEvent;
 use crate::event::keys;
+use crossterm::event::KeyEvent;
 
 /// A text input field with cursor support
 #[derive(Debug, Default, Clone)]

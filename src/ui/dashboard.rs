@@ -235,9 +235,10 @@ fn render_recent_activity(frame: &mut Frame, theme: &Theme, area: Rect, state: &
     }
 
     if update_lines.is_empty() {
-        let empty_msg = Paragraph::new(Line::from(vec![
-            Span::styled("No recent updates", theme.text_muted()),
-        ]));
+        let empty_msg = Paragraph::new(Line::from(vec![Span::styled(
+            "No recent updates",
+            theme.text_muted(),
+        )]));
         frame.render_widget(empty_msg, updates_inner);
     } else {
         let updates_para = Paragraph::new(update_lines);
@@ -301,14 +302,8 @@ fn render_resource_chart(frame: &mut Frame, theme: &Theme, area: Rect, state: &A
 
     // Calculate bounds
     let max_x = data.len() as f64;
-    let max_y = data
-        .iter()
-        .map(|(_, y)| *y)
-        .fold(0.0_f64, |a, b| a.max(b));
-    let min_y = data
-        .iter()
-        .map(|(_, y)| *y)
-        .fold(f64::MAX, |a, b| a.min(b));
+    let max_y = data.iter().map(|(_, y)| *y).fold(0.0_f64, |a, b| a.max(b));
+    let min_y = data.iter().map(|(_, y)| *y).fold(f64::MAX, |a, b| a.min(b));
 
     // Add some padding to y bounds
     let y_padding = ((max_y - min_y) * 0.1).max(5.0);

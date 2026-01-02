@@ -34,7 +34,11 @@ fn get_image() -> &'static DynamicImage {
 }
 
 /// Convert image to pixel color grid at specified dimensions
-fn image_to_pixels(img: &DynamicImage, target_width: u32, target_height: u32) -> Vec<Vec<Option<Color>>> {
+fn image_to_pixels(
+    img: &DynamicImage,
+    target_width: u32,
+    target_height: u32,
+) -> Vec<Vec<Option<Color>>> {
     // Use resize_exact to get exact dimensions we want
     let resized = img.resize_exact(
         target_width,
@@ -93,7 +97,12 @@ pub fn render_splash(
     let action_height: u16 = 2;
     let checkbox_height: u16 = 3;
     let spacing: u16 = 10; // Total spacing between elements
-    let reserved_height = title_height + version_height + checklist_height + action_height + checkbox_height + spacing;
+    let reserved_height = title_height
+        + version_height
+        + checklist_height
+        + action_height
+        + checkbox_height
+        + spacing;
 
     // Calculate available space for the logo
     let available_height = area.height.saturating_sub(reserved_height);
@@ -158,53 +167,43 @@ pub fn render_splash(
         .split(area);
 
     // Render logo
-    let pixel_lines: Vec<Line> = pixels
-        .iter()
-        .map(|row| pixels_to_line(row))
-        .collect();
+    let pixel_lines: Vec<Line> = pixels.iter().map(|row| pixels_to_line(row)).collect();
 
-    let pixel_paragraph = Paragraph::new(pixel_lines)
-        .alignment(Alignment::Center);
+    let pixel_paragraph = Paragraph::new(pixel_lines).alignment(Alignment::Center);
 
     frame.render_widget(pixel_paragraph, chunks[1]);
 
     // Render title - use Pulumi Violet for brand consistency
-    let title_line = Line::from(vec![
-        Span::styled(
-            "Lazy Pulumi",
-            Style::default().fg(theme.colors.violet).add_modifier(Modifier::BOLD),
-        ),
-    ]);
+    let title_line = Line::from(vec![Span::styled(
+        "Lazy Pulumi",
+        Style::default()
+            .fg(theme.colors.violet)
+            .add_modifier(Modifier::BOLD),
+    )]);
 
-    let title_paragraph = Paragraph::new(title_line)
-        .alignment(Alignment::Center);
+    let title_paragraph = Paragraph::new(title_line).alignment(Alignment::Center);
 
     frame.render_widget(title_paragraph, chunks[3]);
 
     // Render version
-    let version_line = Line::from(vec![
-        Span::styled(
-            format!("v{}", VERSION),
-            Style::default().fg(theme.text_muted),
-        ),
-    ]);
+    let version_line = Line::from(vec![Span::styled(
+        format!("v{}", VERSION),
+        Style::default().fg(theme.text_muted),
+    )]);
 
-    let version_paragraph = Paragraph::new(version_line)
-        .alignment(Alignment::Center);
+    let version_paragraph = Paragraph::new(version_line).alignment(Alignment::Center);
 
     frame.render_widget(version_paragraph, chunks[5]);
 
     // Render startup checklist
     let checklist_lines = render_checklist(theme, spinner_char, checks);
-    let checklist_paragraph = Paragraph::new(checklist_lines)
-        .alignment(Alignment::Center);
+    let checklist_paragraph = Paragraph::new(checklist_lines).alignment(Alignment::Center);
 
     frame.render_widget(checklist_paragraph, chunks[7]);
 
     // Render action hint (press enter to continue, or error message)
     let action_lines = render_action_hint(theme, checks);
-    let action_paragraph = Paragraph::new(action_lines)
-        .alignment(Alignment::Center);
+    let action_paragraph = Paragraph::new(action_lines).alignment(Alignment::Center);
 
     frame.render_widget(action_paragraph, chunks[9]);
 
@@ -214,7 +213,9 @@ pub fn render_splash(
         let checkbox_line = Line::from(vec![
             Span::styled(
                 checkbox_icon,
-                Style::default().fg(theme.primary).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(theme.primary)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::styled(
                 " Don't show this again",
@@ -223,37 +224,52 @@ pub fn render_splash(
         ]);
 
         let hint_line = Line::from(vec![
-            Span::styled(
-                "Press ",
-                Style::default().fg(theme.text_muted),
-            ),
+            Span::styled("Press ", Style::default().fg(theme.text_muted)),
             Span::styled(
                 "Space",
-                Style::default().fg(theme.primary).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(theme.primary)
+                    .add_modifier(Modifier::BOLD),
             ),
-            Span::styled(
-                " to toggle",
-                Style::default().fg(theme.text_muted),
-            ),
+            Span::styled(" to toggle", Style::default().fg(theme.text_muted)),
         ]);
 
-        let checkbox_paragraph = Paragraph::new(vec![checkbox_line, hint_line])
-            .alignment(Alignment::Center);
+        let checkbox_paragraph =
+            Paragraph::new(vec![checkbox_line, hint_line]).alignment(Alignment::Center);
 
         frame.render_widget(checkbox_paragraph, chunks[11]);
     }
 }
 
 /// Render the startup checklist items
-fn render_checklist(theme: &Theme, spinner_char: &str, checks: &StartupChecks) -> Vec<Line<'static>> {
+fn render_checklist(
+    theme: &Theme,
+    spinner_char: &str,
+    checks: &StartupChecks,
+) -> Vec<Line<'static>> {
     vec![
-        render_check_line(theme, spinner_char, &checks.token_check.name, &checks.token_check.status),
-        render_check_line(theme, spinner_char, &checks.cli_check.name, &checks.cli_check.status),
+        render_check_line(
+            theme,
+            spinner_char,
+            checks.token_check.name,
+            &checks.token_check.status,
+        ),
+        render_check_line(
+            theme,
+            spinner_char,
+            checks.cli_check.name,
+            &checks.cli_check.status,
+        ),
     ]
 }
 
 /// Render a single check line
-fn render_check_line(theme: &Theme, spinner_char: &str, name: &str, status: &CheckStatus) -> Line<'static> {
+fn render_check_line(
+    theme: &Theme,
+    spinner_char: &str,
+    name: &str,
+    status: &CheckStatus,
+) -> Line<'static> {
     let (icon, icon_style, detail) = match status {
         CheckStatus::Pending => (
             "○".to_string(),
@@ -285,7 +301,10 @@ fn render_check_line(theme: &Theme, spinner_char: &str, name: &str, status: &Che
 
     Line::from(vec![
         Span::styled(format!("{} ", icon), icon_style),
-        Span::styled(format!("{}: ", name), Style::default().fg(theme.text_secondary)),
+        Span::styled(
+            format!("{}: ", name),
+            Style::default().fg(theme.text_secondary),
+        ),
         Span::styled(detail, detail_style),
     ])
 }
@@ -294,18 +313,27 @@ fn render_check_line(theme: &Theme, spinner_char: &str, name: &str, status: &Che
 fn render_action_hint(theme: &Theme, checks: &StartupChecks) -> Vec<Line<'static>> {
     if checks.any_running() || !checks.all_complete() {
         // Still running checks
-        vec![Line::from(vec![
-            Span::styled("Running startup checks...", Style::default().fg(theme.text_muted)),
-        ])]
+        vec![Line::from(vec![Span::styled(
+            "Running startup checks...",
+            Style::default().fg(theme.text_muted),
+        )])]
     } else if checks.any_failed() {
         // Checks failed - only allow quitting
         vec![
-            Line::from(vec![
-                Span::styled("Startup checks failed", Style::default().fg(theme.colors.salmon).add_modifier(Modifier::BOLD)),
-            ]),
+            Line::from(vec![Span::styled(
+                "Startup checks failed",
+                Style::default()
+                    .fg(theme.colors.salmon)
+                    .add_modifier(Modifier::BOLD),
+            )]),
             Line::from(vec![
                 Span::styled("Press ", Style::default().fg(theme.text_muted)),
-                Span::styled("q", Style::default().fg(theme.colors.salmon).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "q",
+                    Style::default()
+                        .fg(theme.colors.salmon)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(" to quit", Style::default().fg(theme.text_muted)),
             ]),
         ]
@@ -313,7 +341,12 @@ fn render_action_hint(theme: &Theme, checks: &StartupChecks) -> Vec<Line<'static
         // All checks passed
         vec![Line::from(vec![
             Span::styled("Press ", Style::default().fg(theme.text_muted)),
-            Span::styled("Enter", Style::default().fg(theme.primary).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Enter",
+                Style::default()
+                    .fg(theme.primary)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::styled(" to continue", Style::default().fg(theme.text_muted)),
         ])]
     }

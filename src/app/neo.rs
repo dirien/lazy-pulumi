@@ -55,7 +55,11 @@ impl App {
                     self.neo_polling = true;
                     self.neo_poll_counter = 5; // Trigger immediate poll on next tick
                 }
-                NeoAsyncResult::EventsReceived { messages, has_more: _, task_status } => {
+                NeoAsyncResult::EventsReceived {
+                    messages,
+                    has_more: _,
+                    task_status,
+                } => {
                     let current_count = messages.len();
 
                     // Only update if we got messages from the API
@@ -99,10 +103,9 @@ impl App {
                     self.neo_task_is_running = task_is_running;
 
                     // Check for assistant response
-                    let has_assistant_response =
-                        self.state.neo_messages.iter().any(|m| {
-                            m.message_type == NeoMessageType::AssistantMessage && !m.content.is_empty()
-                        });
+                    let has_assistant_response = self.state.neo_messages.iter().any(|m| {
+                        m.message_type == NeoMessageType::AssistantMessage && !m.content.is_empty()
+                    });
 
                     // Stop polling if:
                     // 1. Task status is NOT running/in_progress (i.e., idle, completed, failed)
@@ -115,8 +118,12 @@ impl App {
 
                     log::debug!(
                         "Neo poll: status={:?}, running={}, stable={}, poll={}/{}, stop={}",
-                        task_status, task_is_running, self.neo_stable_polls,
-                        self.neo_current_poll, self.neo_max_polls, should_stop
+                        task_status,
+                        task_is_running,
+                        self.neo_stable_polls,
+                        self.neo_current_poll,
+                        self.neo_max_polls,
+                        should_stop
                     );
 
                     if should_stop {
@@ -146,8 +153,7 @@ impl App {
 
     /// Spawn async task to poll Neo events and task status
     pub(super) fn spawn_neo_poll(&self) {
-        if let (Some(task_id), Some(org)) =
-            (&self.state.current_task_id, &self.state.organization)
+        if let (Some(task_id), Some(org)) = (&self.state.current_task_id, &self.state.organization)
         {
             if let Some(ref client) = self.client {
                 let client = client.clone();
@@ -163,9 +169,7 @@ impl App {
                     );
 
                     // Extract task status (if available)
-                    let task_status = task_result
-                        .ok()
-                        .and_then(|task| task.status);
+                    let task_status = task_result.ok().and_then(|task| task.status);
 
                     match events_result {
                         Ok(response) => {
@@ -359,7 +363,10 @@ impl App {
 
     /// Insert the selected slash command into the input (without executing)
     pub(super) fn insert_selected_slash_command(&mut self) {
-        if let Some(cmd) = self.neo_filtered_commands.get(self.neo_command_picker_index) {
+        if let Some(cmd) = self
+            .neo_filtered_commands
+            .get(self.neo_command_picker_index)
+        {
             let current_input = self.neo_input.value().to_string();
 
             // Find the last '/' to replace partial command

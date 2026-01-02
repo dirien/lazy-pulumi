@@ -4,7 +4,9 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     prelude::*,
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState},
+    widgets::{
+        Block, Borders, List, ListItem, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
+    },
 };
 use tui_scrollview::{ScrollView, ScrollViewState};
 
@@ -13,34 +15,121 @@ use crate::app::EscPane;
 use crate::components::StatefulList;
 use crate::theme::{symbols, Theme};
 
-/// Render the ESC environments view
-pub fn render_esc_view(
-    frame: &mut Frame,
-    theme: &Theme,
-    area: Rect,
-    environments: &mut StatefulList<EscEnvironmentSummary>,
-    selected_env_yaml: Option<&str>,
-    selected_env_values: Option<&serde_json::Value>,
+/// Props for rendering the ESC view
+pub struct EscViewProps<'a> {
+    pub environments: &'a mut StatefulList<EscEnvironmentSummary>,
+    pub selected_env_yaml: Option<&'a str>,
+    /// Cached syntax-highlighted lines for YAML (avoids re-highlighting on every frame)
+    pub selected_env_yaml_highlighted: Option<&'a Vec<Line<'static>>>,
+    pub selected_env_values: Option<&'a serde_json::Value>,
+    /// Cached syntax-highlighted lines for resolved values (avoids re-highlighting on every frame)
+    pub selected_env_values_highlighted: Option<&'a Vec<Line<'static>>>,
+    pub focused_pane: EscPane,
+    pub definition_scroll: &'a mut ScrollViewState,
+    pub values_scroll: &'a mut ScrollViewState,
+}
+
+/// Builder for rendering scrollable panes
+struct ScrollablePaneBuilder<'a> {
+    title: &'a str,
+    content: Option<String>,
+    /// Pre-computed highlighted lines (if available, skips highlighting)
+    highlighted_lines: Option<&'a Vec<Line<'static>>>,
+    is_focused: bool,
+    scroll_state: &'a mut ScrollViewState,
+    hint: &'a str,
+    use_syntax_highlight: bool,
+}
+
+impl<'a> ScrollablePaneBuilder<'a> {
+    fn new(title: &'a str, scroll_state: &'a mut ScrollViewState) -> Self {
+        Self {
+            title,
+            content: None,
+            highlighted_lines: None,
+            is_focused: false,
+            scroll_state,
+            hint: "",
+            use_syntax_highlight: false,
+        }
+    }
+
+    fn content(mut self, content: Option<String>) -> Self {
+        self.content = content;
+        self
+    }
+
+    /// Use pre-computed highlighted lines (skips syntax highlighting)
+    fn highlighted(mut self, lines: Option<&'a Vec<Line<'static>>>) -> Self {
+        self.highlighted_lines = lines;
+        self
+    }
+
+    fn focused(mut self, is_focused: bool) -> Self {
+        self.is_focused = is_focused;
+        self
+    }
+
+    fn hint(mut self, hint: &'a str) -> Self {
+        self.hint = hint;
+        self
+    }
+
+    fn syntax_highlight(mut self, enable: bool) -> Self {
+        self.use_syntax_highlight = enable;
+        self
+    }
+
+    fn render(self, frame: &mut Frame, theme: &Theme, area: Rect) {
+        render_scrollable_pane_impl(
+            frame,
+            theme,
+            area,
+            self.title,
+            self.content,
+            self.highlighted_lines,
+            self.is_focused,
+            self.scroll_state,
+            self.hint,
+            self.use_syntax_highlight,
+        );
+    }
+}
+
+/// Props for rendering environment details
+struct EnvironmentDetailsProps<'a> {
+    selected: Option<&'a EscEnvironmentSummary>,
+    yaml: Option<&'a str>,
+    yaml_highlighted: Option<&'a Vec<Line<'static>>>,
+    values: Option<&'a serde_json::Value>,
+    values_highlighted: Option<&'a Vec<Line<'static>>>,
     focused_pane: EscPane,
-    definition_scroll: &mut ScrollViewState,
-    values_scroll: &mut ScrollViewState,
-) {
+    definition_scroll: &'a mut ScrollViewState,
+    values_scroll: &'a mut ScrollViewState,
+}
+
+/// Render the ESC environments view
+pub fn render_esc_view(frame: &mut Frame, theme: &Theme, area: Rect, props: EscViewProps<'_>) {
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
         .split(area);
 
-    render_environments_list(frame, theme, chunks[0], environments);
+    render_environments_list(frame, theme, chunks[0], props.environments);
     render_environment_details(
         frame,
         theme,
         chunks[1],
-        environments.selected(),
-        selected_env_yaml,
-        selected_env_values,
-        focused_pane,
-        definition_scroll,
-        values_scroll,
+        EnvironmentDetailsProps {
+            selected: props.environments.selected(),
+            yaml: props.selected_env_yaml,
+            yaml_highlighted: props.selected_env_yaml_highlighted,
+            values: props.selected_env_values,
+            values_highlighted: props.selected_env_values_highlighted,
+            focused_pane: props.focused_pane,
+            definition_scroll: props.definition_scroll,
+            values_scroll: props.values_scroll,
+        },
     );
 }
 
@@ -116,7 +205,7 @@ fn render_environments_list(
 ///   "schema": { ... },          // JSON schema - skip
 ///   "executionContext": { ... } // Metadata - skip
 /// }
-fn extract_values(values: &serde_json::Value) -> serde_json::Value {
+pub fn extract_values(values: &serde_json::Value) -> serde_json::Value {
     if let Some(obj) = values.as_object() {
         // If there's a "properties" key, extract values from it
         // This is the main structure returned by the ESC open API
@@ -182,9 +271,7 @@ fn extract_property_value(prop: &serde_json::Value) -> serde_json::Value {
 
     // For arrays, process each element
     if let Some(arr) = prop.as_array() {
-        return serde_json::Value::Array(
-            arr.iter().map(extract_property_value).collect()
-        );
+        return serde_json::Value::Array(arr.iter().map(extract_property_value).collect());
     }
 
     // For primitives, return as-is
@@ -198,8 +285,15 @@ fn filter_trace_info(value: &serde_json::Value) -> serde_json::Value {
             let mut result = serde_json::Map::new();
             for (key, val) in obj {
                 // Skip trace-related keys
-                if key == "trace" || key == "def" || key == "begin" || key == "end"
-                   || key == "byte" || key == "column" || key == "line" || key == "environment" {
+                if key == "trace"
+                    || key == "def"
+                    || key == "begin"
+                    || key == "end"
+                    || key == "byte"
+                    || key == "column"
+                    || key == "line"
+                    || key == "environment"
+                {
                     continue;
                 }
                 // If this is a "value" wrapper with trace, extract just the value
@@ -227,7 +321,7 @@ fn filter_trace_info(value: &serde_json::Value) -> serde_json::Value {
 }
 
 /// Convert JSON value to YAML string
-fn json_to_yaml(value: &serde_json::Value) -> String {
+pub fn json_to_yaml(value: &serde_json::Value) -> String {
     // Use serde_yaml if available, otherwise format manually
     match serde_json::to_value(value) {
         Ok(v) => format_as_yaml(&v, 0),
@@ -293,10 +387,16 @@ fn format_scalar(value: &serde_json::Value) -> String {
         serde_json::Value::Number(n) => n.to_string(),
         serde_json::Value::String(s) => {
             // Check if string needs quoting (contains special chars or looks like a number)
-            if s.contains(':') || s.contains('#') || s.contains('\n')
-               || s.starts_with(' ') || s.ends_with(' ')
-               || s == "true" || s == "false" || s == "null"
-               || s.parse::<f64>().is_ok() {
+            if s.contains(':')
+                || s.contains('#')
+                || s.contains('\n')
+                || s.starts_with(' ')
+                || s.ends_with(' ')
+                || s == "true"
+                || s == "false"
+                || s == "null"
+                || s.parse::<f64>().is_ok()
+            {
                 format!("\"{}\"", s.replace('"', "\\\""))
             } else if s.is_empty() {
                 "\"\"".to_string()
@@ -308,17 +408,11 @@ fn format_scalar(value: &serde_json::Value) -> String {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn render_environment_details(
     frame: &mut Frame,
     theme: &Theme,
     area: Rect,
-    selected: Option<&EscEnvironmentSummary>,
-    yaml: Option<&str>,
-    values: Option<&serde_json::Value>,
-    focused_pane: EscPane,
-    definition_scroll: &mut ScrollViewState,
-    values_scroll: &mut ScrollViewState,
+    props: EnvironmentDetailsProps<'_>,
 ) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -335,7 +429,7 @@ fn render_environment_details(
     let info_inner = info_block.inner(chunks[0]);
     frame.render_widget(info_block, chunks[0]);
 
-    match selected {
+    match props.selected {
         Some(env) => {
             let info_lines = vec![
                 Line::from(vec![
@@ -352,17 +446,11 @@ fn render_environment_details(
                 ]),
                 Line::from(vec![
                     Span::styled("Created:      ", theme.text_secondary()),
-                    Span::styled(
-                        env.created.as_deref().unwrap_or("Unknown"),
-                        theme.text(),
-                    ),
+                    Span::styled(env.created.as_deref().unwrap_or("Unknown"), theme.text()),
                 ]),
                 Line::from(vec![
                     Span::styled("Modified:     ", theme.text_secondary()),
-                    Span::styled(
-                        env.modified.as_deref().unwrap_or("Unknown"),
-                        theme.text(),
-                    ),
+                    Span::styled(env.modified.as_deref().unwrap_or("Unknown"), theme.text()),
                 ]),
             ];
 
@@ -384,57 +472,54 @@ fn render_environment_details(
         .split(chunks[1]);
 
     // YAML definition pane
-    let is_definition_focused = focused_pane == EscPane::Definition;
-    render_scrollable_pane(
-        frame,
-        theme,
-        content_chunks[0],
-        " Definition (YAML) ",
-        yaml.map(|s| s.to_string()),
-        is_definition_focused,
-        definition_scroll,
-        if selected.is_some() { "Press Enter to load definition" } else { "Select an environment" },
-    );
+    let is_definition_focused = props.focused_pane == EscPane::Definition;
+    let definition_hint = if props.selected.is_some() {
+        "Press Enter to load definition"
+    } else {
+        "Select an environment"
+    };
+    ScrollablePaneBuilder::new(" Definition (YAML) ", props.definition_scroll)
+        .content(props.yaml.map(|s| s.to_string()))
+        .highlighted(props.yaml_highlighted) // Use cached highlighted lines
+        .focused(is_definition_focused)
+        .hint(definition_hint)
+        .syntax_highlight(true)
+        .render(frame, theme, content_chunks[0]);
 
     // Resolved values pane
-    let is_values_focused = focused_pane == EscPane::ResolvedValues;
-    let values_content = values.map(|v| {
-        let filtered = extract_values(v);
-        json_to_yaml(&filtered)
-    });
-    render_scrollable_pane(
-        frame,
-        theme,
-        content_chunks[1],
-        " Resolved Values ",
-        values_content,
-        is_values_focused,
-        values_scroll,
-        if selected.is_some() { "Press 'o' to open & resolve" } else { "Select an environment" },
-    );
+    let is_values_focused = props.focused_pane == EscPane::ResolvedValues;
+    // Only compute values_content if we don't have cached highlighted lines
+    let values_content = if props.values_highlighted.is_none() {
+        props.values.map(|v| {
+            let filtered = extract_values(v);
+            json_to_yaml(&filtered)
+        })
+    } else {
+        None
+    };
+    let values_hint = if props.selected.is_some() {
+        "Press 'o' to open & resolve"
+    } else {
+        "Select an environment"
+    };
+    ScrollablePaneBuilder::new(" Resolved Values ", props.values_scroll)
+        .content(values_content)
+        .highlighted(props.values_highlighted) // Use cached highlighted lines
+        .focused(is_values_focused)
+        .hint(values_hint)
+        .syntax_highlight(true)
+        .render(frame, theme, content_chunks[1]);
 }
 
+/// Internal implementation for rendering scrollable panes
 #[allow(clippy::too_many_arguments)]
-fn render_scrollable_pane(
+fn render_scrollable_pane_impl(
     frame: &mut Frame,
     theme: &Theme,
     area: Rect,
     title: &str,
     content: Option<String>,
-    is_focused: bool,
-    scroll_state: &mut ScrollViewState,
-    hint: &str,
-) {
-    render_scrollable_pane_with_highlight(frame, theme, area, title, content, is_focused, scroll_state, hint, true)
-}
-
-#[allow(clippy::too_many_arguments)]
-fn render_scrollable_pane_with_highlight(
-    frame: &mut Frame,
-    theme: &Theme,
-    area: Rect,
-    title: &str,
-    content: Option<String>,
+    pre_highlighted: Option<&Vec<Line<'static>>>,
     is_focused: bool,
     scroll_state: &mut ScrollViewState,
     hint: &str,
@@ -453,62 +538,84 @@ fn render_scrollable_pane_with_highlight(
         .borders(Borders::ALL)
         .border_style(border_style)
         .title(title)
-        .title_style(if is_focused { theme.title() } else { theme.subtitle() });
+        .title_style(if is_focused {
+            theme.title()
+        } else {
+            theme.subtitle()
+        });
 
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    match content {
-        Some(text) => {
-            // Get highlighted lines or plain text
-            let highlighted_lines = if use_syntax_highlight {
-                highlight_yaml(&text)
+    // Use pre-highlighted lines if available, otherwise fall back to content
+    let has_content = pre_highlighted.is_some() || content.is_some();
+
+    if has_content {
+        // Use cached highlighted lines if available, otherwise compute them
+        let highlighted_lines: Vec<Line<'static>> = if let Some(cached) = pre_highlighted {
+            cached.clone()
+        } else if let Some(ref text) = content {
+            if use_syntax_highlight {
+                highlight_yaml(text)
             } else {
                 text.lines().map(|l| Line::from(l.to_string())).collect()
-            };
+            }
+        } else {
+            Vec::new()
+        };
 
-            let content_height = highlighted_lines.len() as u16;
-            let view_height = inner.height;
+        let content_height = highlighted_lines.len() as u16;
+        let view_height = inner.height;
 
-            // Create scrollable content
-            let mut scroll_view = ScrollView::new(Size::new(inner.width.saturating_sub(1), content_height.max(view_height)));
+        // Create scrollable content
+        let mut scroll_view = ScrollView::new(Size::new(
+            inner.width.saturating_sub(1),
+            content_height.max(view_height),
+        ));
 
-            // Render content into scroll view with syntax highlighting
-            let content_text = Text::from(highlighted_lines);
-            let content_para = Paragraph::new(content_text);
-            scroll_view.render_widget(content_para, Rect::new(0, 0, inner.width.saturating_sub(1), content_height.max(view_height)));
+        // Render content into scroll view with syntax highlighting
+        let content_text = Text::from(highlighted_lines);
+        let content_para = Paragraph::new(content_text);
+        scroll_view.render_widget(
+            content_para,
+            Rect::new(
+                0,
+                0,
+                inner.width.saturating_sub(1),
+                content_height.max(view_height),
+            ),
+        );
 
-            // Render scroll view
-            frame.render_stateful_widget(scroll_view, inner, scroll_state);
+        // Render scroll view
+        frame.render_stateful_widget(scroll_view, inner, scroll_state);
 
-            // Render scrollbar if content exceeds view height
-            if content_height > view_height {
-                let scrollbar_area = Rect::new(
-                    inner.x + inner.width.saturating_sub(1),
-                    inner.y,
-                    1,
-                    inner.height,
-                );
+        // Render scrollbar if content exceeds view height
+        if content_height > view_height {
+            let scrollbar_area = Rect::new(
+                inner.x + inner.width.saturating_sub(1),
+                inner.y,
+                1,
+                inner.height,
+            );
 
-                let scroll_position = scroll_state.offset().y as usize;
-                let mut scrollbar_state = ScrollbarState::new(content_height.saturating_sub(view_height) as usize)
+            let scroll_position = scroll_state.offset().y as usize;
+            let mut scrollbar_state =
+                ScrollbarState::new(content_height.saturating_sub(view_height) as usize)
                     .position(scroll_position);
 
-                let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-                    .begin_symbol(Some("▲"))
-                    .end_symbol(Some("▼"))
-                    .track_symbol(Some("│"))
-                    .thumb_symbol("█");
+            let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                .begin_symbol(Some("▲"))
+                .end_symbol(Some("▼"))
+                .track_symbol(Some("│"))
+                .thumb_symbol("█");
 
-                frame.render_stateful_widget(scrollbar, scrollbar_area, &mut scrollbar_state);
-            }
+            frame.render_stateful_widget(scrollbar, scrollbar_area, &mut scrollbar_state);
         }
-        None => {
-            let empty = Paragraph::new(hint)
-                .style(theme.text_muted())
-                .alignment(Alignment::Center);
-            frame.render_widget(empty, inner);
-        }
+    } else {
+        let empty = Paragraph::new(hint)
+            .style(theme.text_muted())
+            .alignment(Alignment::Center);
+        frame.render_widget(empty, inner);
     }
 }
 
@@ -535,7 +642,11 @@ pub fn render_esc_editor(
     frame.render_widget(Clear, dialog_area);
 
     // Main block with title and instructions
-    let modified_indicator = if editor.is_modified() { " [modified]" } else { "" };
+    let modified_indicator = if editor.is_modified() {
+        " [modified]"
+    } else {
+        ""
+    };
     let title = format!(" Edit: {} {}", env_name, modified_indicator);
 
     let block = Block::default()
@@ -633,8 +744,8 @@ pub fn render_esc_editor(
 
     // Render scrollbar if content exceeds view
     if total_lines > visible_height {
-        let mut scrollbar_state = ScrollbarState::new(total_lines.saturating_sub(visible_height))
-            .position(scroll_offset);
+        let mut scrollbar_state =
+            ScrollbarState::new(total_lines.saturating_sub(visible_height)).position(scroll_offset);
 
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
             .begin_symbol(Some("▲"))
@@ -644,5 +755,4 @@ pub fn render_esc_editor(
 
         frame.render_stateful_widget(scrollbar, scrollbar_area, &mut scrollbar_state);
     }
-
 }

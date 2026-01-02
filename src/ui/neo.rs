@@ -30,43 +30,54 @@ const THINKING_ICON: &str = "🤔";
 /// Slash command for the picker
 use crate::api::NeoSlashCommand;
 
-/// Render the Neo chat view
-pub fn render_neo_view(
-    frame: &mut Frame,
-    theme: &Theme,
-    area: Rect,
-    tasks: &mut StatefulList<NeoTask>,
-    messages: &[NeoMessage],
-    input: &TextInput,
-    scroll_state: &mut ScrollViewState,
-    auto_scroll: &Arc<AtomicBool>,
+/// Props for command picker state
+pub struct CommandPickerProps<'a> {
+    pub show: bool,
+    pub filtered_commands: &'a [NeoSlashCommand],
+    pub index: usize,
+    pub all_commands: &'a [NeoSlashCommand],
+    pub pending_commands: &'a [NeoSlashCommand],
+}
+
+/// Props for rendering the Neo view
+pub struct NeoViewProps<'a> {
+    pub tasks: &'a mut StatefulList<NeoTask>,
+    pub messages: &'a [NeoMessage],
+    pub input: &'a TextInput,
+    pub scroll_state: &'a mut ScrollViewState,
+    pub auto_scroll: &'a Arc<AtomicBool>,
+    pub is_loading: bool,
+    pub spinner_char: &'a str,
+    pub hide_task_list: bool,
+    pub command_picker: CommandPickerProps<'a>,
+}
+
+/// Props for chat view (internal)
+struct ChatViewProps<'a> {
+    messages: &'a [NeoMessage],
+    input: &'a TextInput,
+    scroll_state: &'a mut ScrollViewState,
+    auto_scroll: &'a Arc<AtomicBool>,
     is_loading: bool,
-    spinner_char: &str,
-    hide_task_list: bool,
-    show_command_picker: bool,
-    filtered_commands: &[NeoSlashCommand],
-    command_picker_index: usize,
-    all_commands: &[NeoSlashCommand],
-    pending_commands: &[NeoSlashCommand],
-) {
-    if hide_task_list {
+    spinner_char: &'a str,
+    command_picker: CommandPickerProps<'a>,
+}
+
+/// Render the Neo chat view
+pub fn render_neo_view(frame: &mut Frame, theme: &Theme, area: Rect, props: NeoViewProps<'_>) {
+    let chat_props = ChatViewProps {
+        messages: props.messages,
+        input: props.input,
+        scroll_state: props.scroll_state,
+        auto_scroll: props.auto_scroll,
+        is_loading: props.is_loading,
+        spinner_char: props.spinner_char,
+        command_picker: props.command_picker,
+    };
+
+    if props.hide_task_list {
         // Full-width chat when task list is hidden
-        render_chat_view(
-            frame,
-            theme,
-            area,
-            messages,
-            input,
-            scroll_state,
-            auto_scroll,
-            is_loading,
-            spinner_char,
-            show_command_picker,
-            filtered_commands,
-            command_picker_index,
-            all_commands,
-            pending_commands,
-        );
+        render_chat_view(frame, theme, area, chat_props);
     } else {
         // Split view with task list on left
         let chunks = Layout::default()
@@ -74,23 +85,8 @@ pub fn render_neo_view(
             .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
             .split(area);
 
-        render_tasks_list(frame, theme, chunks[0], tasks);
-        render_chat_view(
-            frame,
-            theme,
-            chunks[1],
-            messages,
-            input,
-            scroll_state,
-            auto_scroll,
-            is_loading,
-            spinner_char,
-            show_command_picker,
-            filtered_commands,
-            command_picker_index,
-            all_commands,
-            pending_commands,
-        );
+        render_tasks_list(frame, theme, chunks[0], props.tasks);
+        render_chat_view(frame, theme, chunks[1], chat_props);
     }
 }
 
@@ -170,27 +166,12 @@ fn render_tasks_list(
 // Command picker icon
 const COMMAND_ICON: &str = "⌘";
 
-fn render_chat_view(
-    frame: &mut Frame,
-    theme: &Theme,
-    area: Rect,
-    messages: &[NeoMessage],
-    input: &TextInput,
-    scroll_state: &mut ScrollViewState,
-    auto_scroll: &Arc<AtomicBool>,
-    is_loading: bool,
-    spinner_char: &str,
-    show_command_picker: bool,
-    filtered_commands: &[NeoSlashCommand],
-    command_picker_index: usize,
-    all_commands: &[NeoSlashCommand],
-    pending_commands: &[NeoSlashCommand],
-) {
+fn render_chat_view(frame: &mut Frame, theme: &Theme, area: Rect, props: ChatViewProps<'_>) {
     // Layout: messages area, thinking indicator (if loading), command picker (if showing), input area
-    let thinking_height = if is_loading { 2 } else { 0 };
-    let command_picker_height = if show_command_picker {
+    let thinking_height = if props.is_loading { 2 } else { 0 };
+    let command_picker_height = if props.command_picker.show {
         // Show up to 8 commands + 2 for borders
-        (filtered_commands.len().min(8) + 2) as u16
+        (props.command_picker.filtered_commands.len().min(8) + 2) as u16
     } else {
         0
     };
@@ -208,7 +189,7 @@ fn render_chat_view(
     // Messages area
     let messages_block = Block::default()
         .borders(Borders::ALL)
-        .border_style(if input.is_focused() {
+        .border_style(if props.input.is_focused() {
             theme.border()
         } else {
             theme.border_focused()
@@ -219,9 +200,9 @@ fn render_chat_view(
     let messages_inner = messages_block.inner(chunks[0]);
     frame.render_widget(messages_block, chunks[0]);
 
-    if messages.is_empty() {
+    if props.messages.is_empty() {
         // Show welcome message or loading indicator
-        if is_loading {
+        if props.is_loading {
             // Just show empty area while loading - the thinking indicator below will show
         } else {
             let welcome_lines = vec![
@@ -245,9 +226,7 @@ fn render_chat_view(
                     theme.text_secondary(),
                 )),
                 Line::from(""),
-                Line::from(vec![
-                    Span::styled("  Examples:", theme.text_muted()),
-                ]),
+                Line::from(vec![Span::styled("  Examples:", theme.text_muted())]),
                 Line::from(vec![
                     Span::styled("    ", theme.text_muted()),
                     Span::styled(symbols::BULLET, theme.accent()),
@@ -280,7 +259,7 @@ fn render_chat_view(
         // Build message lines - all left-aligned for simplicity
         let mut lines: Vec<Line> = Vec::new();
 
-        for msg in messages.iter() {
+        for msg in props.messages.iter() {
             match msg.message_type {
                 NeoMessageType::UserMessage => {
                     // User messages with arrow indicator
@@ -329,7 +308,9 @@ fn render_chat_view(
                     lines.push(Line::from(vec![
                         Span::styled(format!("  {} ", RESULT_ICON), theme.success()),
                         Span::styled(
-                            msg.tool_name.clone().unwrap_or_else(|| "Result".to_string()),
+                            msg.tool_name
+                                .clone()
+                                .unwrap_or_else(|| "Result".to_string()),
                             theme.text_secondary(),
                         ),
                         Span::styled(": ", theme.text_muted()),
@@ -402,20 +383,19 @@ fn render_chat_view(
         let visible_height = messages_inner.height as usize;
 
         // Create paragraph with wrapping to get accurate line count
-        let content_para = Paragraph::new(lines)
-            .wrap(ratatui::widgets::Wrap { trim: false });
+        let content_para = Paragraph::new(lines).wrap(ratatui::widgets::Wrap { trim: false });
 
         // Get EXACT line count from Ratatui (accounts for actual word wrapping)
         let total_lines = content_para.line_count(messages_inner.width);
         let max_scroll = total_lines.saturating_sub(visible_height);
 
         // Determine scroll position
-        let scroll_y: u16 = if auto_scroll.load(Ordering::Relaxed) {
+        let scroll_y: u16 = if props.auto_scroll.load(Ordering::Relaxed) {
             // When auto-scroll is enabled, go to exact bottom
             max_scroll as u16
         } else {
             // Manual scroll: use the stored offset, clamped to max
-            let current_offset = scroll_state.offset();
+            let current_offset = props.scroll_state.offset();
             (current_offset.y as usize).min(max_scroll) as u16
         };
 
@@ -434,10 +414,10 @@ fn render_chat_view(
             );
 
             // For scrollbar, use estimated position (not u16::MAX)
-            let scrollbar_pos = if auto_scroll.load(Ordering::Relaxed) {
+            let scrollbar_pos = if props.auto_scroll.load(Ordering::Relaxed) {
                 max_scroll // At bottom
             } else {
-                scroll_state.offset().y as usize
+                props.scroll_state.offset().y as usize
             };
 
             // Calculate thumb position and size
@@ -453,23 +433,24 @@ fn render_chat_view(
                 let y_pos = scrollbar_area.y + y;
                 let is_thumb = (y as usize) >= thumb_pos && (y as usize) < thumb_pos + thumb_height;
                 let symbol = if is_thumb { "█" } else { "░" };
-                let style = if is_thumb { theme.primary() } else { theme.text_muted() };
+                let style = if is_thumb {
+                    theme.primary()
+                } else {
+                    theme.text_muted()
+                };
 
-                frame.buffer_mut().set_string(
-                    scrollbar_area.x,
-                    y_pos,
-                    symbol,
-                    style,
-                );
+                frame
+                    .buffer_mut()
+                    .set_string(scrollbar_area.x, y_pos, symbol, style);
             }
         }
     }
 
     // Thinking indicator (always visible when loading)
-    if is_loading {
+    if props.is_loading {
         let thinking_line = Line::from(vec![
             Span::styled(format!(" {} ", THINKING_ICON), theme.primary()),
-            Span::styled(format!("{} ", spinner_char), theme.warning()),
+            Span::styled(format!("{} ", props.spinner_char), theme.warning()),
             Span::styled("Neo is thinking", theme.text()),
             Span::styled("...", theme.text_muted()),
         ]);
@@ -481,20 +462,26 @@ fn render_chat_view(
     }
 
     // Slash command picker (shown above input when typing '/')
-    if show_command_picker && !filtered_commands.is_empty() {
-        render_command_picker(frame, theme, chunks[2], filtered_commands, command_picker_index);
+    if props.command_picker.show && !props.command_picker.filtered_commands.is_empty() {
+        render_command_picker(
+            frame,
+            theme,
+            chunks[2],
+            props.command_picker.filtered_commands,
+            props.command_picker.index,
+        );
     }
 
     // Determine the input title based on context
-    let input_title = if input.is_focused() {
-        if show_command_picker {
+    let input_title = if props.input.is_focused() {
+        if props.command_picker.show {
             " ↑↓: select | Tab: complete | Enter: run "
-        } else if !all_commands.is_empty() {
+        } else if !props.command_picker.all_commands.is_empty() {
             " Type / for commands | Enter to send "
         } else {
             " Message (Enter to send, Esc to cancel) "
         }
-    } else if !all_commands.is_empty() {
+    } else if !props.command_picker.all_commands.is_empty() {
         " Press 'i' to type, '/' for commands "
     } else {
         " Press 'i' to type, 'n' for new task "
@@ -503,13 +490,13 @@ fn render_chat_view(
     // Input area
     let input_block = Block::default()
         .borders(Borders::ALL)
-        .border_style(if input.is_focused() {
+        .border_style(if props.input.is_focused() {
             theme.border_focused()
         } else {
             theme.border()
         })
         .title(input_title)
-        .title_style(if input.is_focused() {
+        .title_style(if props.input.is_focused() {
             theme.primary()
         } else {
             theme.subtitle()
@@ -519,13 +506,18 @@ fn render_chat_view(
     frame.render_widget(input_block, chunks[3]);
 
     // Input text with cursor - highlight slash commands with purple background
-    let input_value = input.value();
-    let cursor_pos = input.cursor();
+    let input_value = props.input.value();
+    let cursor_pos = props.input.cursor();
 
     // Build a list of command names to highlight
-    let command_names: Vec<&str> = pending_commands.iter().map(|c| c.name.as_str()).collect();
+    let command_names: Vec<&str> = props
+        .command_picker
+        .pending_commands
+        .iter()
+        .map(|c| c.name.as_str())
+        .collect();
 
-    if input.is_focused() {
+    if props.input.is_focused() {
         // Render input with slash command highlighting
         let spans = render_input_with_commands(input_value, cursor_pos, &command_names, theme);
         let input_line = Line::from(spans);
@@ -550,9 +542,7 @@ fn render_input_with_commands<'a>(
     use crate::theme::brand;
 
     // Purple style for commands
-    let command_style = Style::default()
-        .fg(Color::White)
-        .bg(brand::VIOLET);
+    let command_style = Style::default().fg(Color::White).bg(brand::VIOLET);
 
     let mut spans = Vec::new();
     let mut i = 0;
@@ -628,9 +618,7 @@ fn render_input_with_commands_unfocused<'a>(
     use crate::theme::brand;
 
     // Purple style for commands
-    let command_style = Style::default()
-        .fg(Color::White)
-        .bg(brand::VIOLET);
+    let command_style = Style::default().fg(Color::White).bg(brand::VIOLET);
 
     let mut spans = Vec::new();
     let mut i = 0;
@@ -748,11 +736,7 @@ const ENTITY_ICON: &str = "◆";
 const POLICY_ICON: &str = "🛡️";
 
 /// Render the Neo task details dialog
-pub fn render_neo_details_dialog(
-    frame: &mut Frame,
-    theme: &Theme,
-    task: &NeoTask,
-) {
+pub fn render_neo_details_dialog(frame: &mut Frame, theme: &Theme, task: &NeoTask) {
     let area = centered_rect(25, 70, frame.area());
 
     // Clear background
@@ -804,14 +788,18 @@ pub fn render_neo_details_dialog(
         theme.text_muted(),
     )));
 
-    let started_on = task.created_at.as_deref().map(|ts| {
-        // Try to parse and format the timestamp nicely
-        if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(ts) {
-            dt.format("%b %d, %Y, %I:%M:%S %p").to_string()
-        } else {
-            ts.to_string()
-        }
-    }).unwrap_or_else(|| "Unknown".to_string());
+    let started_on = task
+        .created_at
+        .as_deref()
+        .map(|ts| {
+            // Try to parse and format the timestamp nicely
+            if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(ts) {
+                dt.format("%b %d, %Y, %I:%M:%S %p").to_string()
+            } else {
+                ts.to_string()
+            }
+        })
+        .unwrap_or_else(|| "Unknown".to_string());
 
     lines.push(Line::from(vec![
         Span::styled(format!("  {} ", CLOCK_ICON), theme.text_secondary()),
@@ -829,7 +817,9 @@ pub fn render_neo_details_dialog(
         theme.text_muted(),
     )));
 
-    let started_by = task.started_by.as_ref()
+    let started_by = task
+        .started_by
+        .as_ref()
         .and_then(|u| u.login.clone().or(u.name.clone()))
         .unwrap_or_else(|| "Unknown".to_string());
 

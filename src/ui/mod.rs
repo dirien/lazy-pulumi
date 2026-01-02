@@ -15,14 +15,14 @@ mod splash;
 mod stacks;
 pub mod syntax;
 
-pub use commands::{render_commands_view, CommandsViewState};
+pub use commands::{render_commands_view, CommandsViewProps, CommandsViewState};
 pub use dashboard::render_dashboard;
-pub use esc::{render_esc_view, render_esc_editor};
+pub use esc::{extract_values, json_to_yaml, render_esc_editor, render_esc_view, EscViewProps};
 pub use header::render_header;
 pub use help::render_help;
 pub use logs::render_logs;
-pub use neo::{render_neo_view, render_neo_details_dialog};
-pub use platform::render_platform_view;
+pub use neo::{render_neo_details_dialog, render_neo_view, CommandPickerProps, NeoViewProps};
+pub use platform::{render_platform_view, PlatformViewProps};
 pub use splash::render_splash;
 pub use stacks::render_stacks_view;
 
@@ -100,9 +100,9 @@ pub fn main_layout(area: Rect) -> (Rect, Rect, Rect) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // Header
-            Constraint::Min(10),    // Content
-            Constraint::Length(1),  // Footer
+            Constraint::Length(3), // Header
+            Constraint::Min(10),   // Content
+            Constraint::Length(1), // Footer
         ])
         .split(area);
 
@@ -134,7 +134,7 @@ pub fn render_org_selector(
     let selected_idx = org_list.selected_index();
 
     // Collect org data to owned values
-    let org_data: Vec<String> = org_list.items().iter().cloned().collect();
+    let org_data: Vec<String> = org_list.items().to_vec();
 
     let items: Vec<ListItem> = org_data
         .iter()
@@ -157,7 +157,14 @@ pub fn render_org_selector(
 
             let content = Line::from(vec![
                 Span::styled(prefix, theme.primary()),
-                Span::styled(org.as_str(), if is_current { theme.primary() } else { theme.text() }),
+                Span::styled(
+                    org.as_str(),
+                    if is_current {
+                        theme.primary()
+                    } else {
+                        theme.text()
+                    },
+                ),
                 Span::styled(suffix, theme.success()),
             ]);
 
