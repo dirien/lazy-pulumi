@@ -101,7 +101,7 @@ pub fn check_pulumi_token() -> CheckStatus {
         Ok(token) if !token.is_empty() => {
             // Mask the token for display (show first 4 and last 4 chars)
             let masked = if token.len() > 12 {
-                format!("{}...{}", &token[..7], &token[token.len()-4..])
+                format!("{}...{}", &token[..7], &token[token.len() - 4..])
             } else {
                 "****".to_string()
             };

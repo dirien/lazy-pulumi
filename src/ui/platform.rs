@@ -17,16 +17,21 @@ use crate::theme::{symbols, Theme};
 
 use super::markdown::render_markdown_content;
 
+/// Props for rendering the platform view
+pub struct PlatformViewProps<'a> {
+    pub current_view: PlatformView,
+    pub services: &'a mut StatefulList<Service>,
+    pub packages: &'a mut StatefulList<RegistryPackage>,
+    pub templates: &'a mut StatefulList<RegistryTemplate>,
+    pub description_scroll_state: &'a mut ScrollViewState,
+}
+
 /// Render the platform view with Services, Components, and Templates
 pub fn render_platform_view(
     frame: &mut Frame,
     theme: &Theme,
     area: Rect,
-    current_view: PlatformView,
-    services: &mut StatefulList<Service>,
-    packages: &mut StatefulList<RegistryPackage>,
-    templates: &mut StatefulList<RegistryTemplate>,
-    description_scroll_state: &mut ScrollViewState,
+    props: PlatformViewProps<'_>,
 ) {
     // Main layout: tabs at top, content below
     let chunks = Layout::default()
@@ -35,7 +40,7 @@ pub fn render_platform_view(
         .split(area);
 
     // Render tabs
-    render_platform_tabs(frame, theme, chunks[0], current_view);
+    render_platform_tabs(frame, theme, chunks[0], props.current_view);
 
     // Render content based on current view
     let content_chunks = Layout::default()
@@ -43,18 +48,30 @@ pub fn render_platform_view(
         .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
         .split(chunks[1]);
 
-    match current_view {
+    match props.current_view {
         PlatformView::Services => {
-            render_services_list(frame, theme, content_chunks[0], services);
-            render_service_details(frame, theme, content_chunks[1], services.selected());
+            render_services_list(frame, theme, content_chunks[0], props.services);
+            render_service_details(frame, theme, content_chunks[1], props.services.selected());
         }
         PlatformView::Components => {
-            render_packages_list(frame, theme, content_chunks[0], packages);
-            render_package_details(frame, theme, content_chunks[1], packages.selected(), description_scroll_state);
+            render_packages_list(frame, theme, content_chunks[0], props.packages);
+            render_package_details(
+                frame,
+                theme,
+                content_chunks[1],
+                props.packages.selected(),
+                props.description_scroll_state,
+            );
         }
         PlatformView::Templates => {
-            render_templates_list(frame, theme, content_chunks[0], templates);
-            render_template_details(frame, theme, content_chunks[1], templates.selected(), description_scroll_state);
+            render_templates_list(frame, theme, content_chunks[0], props.templates);
+            render_template_details(
+                frame,
+                theme,
+                content_chunks[1],
+                props.templates.selected(),
+                props.description_scroll_state,
+            );
         }
     }
 }
@@ -118,11 +135,7 @@ fn render_services_list(
     }
 
     // Collect data to owned values to avoid borrow issues
-    let service_names: Vec<String> = services
-        .items()
-        .iter()
-        .map(|s| s.name.clone())
-        .collect();
+    let service_names: Vec<String> = services.items().iter().map(|s| s.name.clone()).collect();
 
     let items: Vec<ListItem> = service_names
         .iter()
@@ -249,7 +262,12 @@ fn render_packages_list(
     let pkg_data: Vec<(String, String)> = packages
         .items()
         .iter()
-        .map(|pkg| (pkg.display_name(), pkg.version.clone().unwrap_or_else(|| "?".to_string())))
+        .map(|pkg| {
+            (
+                pkg.display_name(),
+                pkg.version.clone().unwrap_or_else(|| "?".to_string()),
+            )
+        })
         .collect();
 
     let items: Vec<ListItem> = pkg_data
@@ -319,24 +337,15 @@ fn render_package_details(
                 ]),
                 Line::from(vec![
                     Span::styled("Version:     ", theme.text_secondary()),
-                    Span::styled(
-                        pkg.version.as_deref().unwrap_or("N/A"),
-                        theme.info(),
-                    ),
+                    Span::styled(pkg.version.as_deref().unwrap_or("N/A"), theme.info()),
                 ]),
                 Line::from(vec![
                     Span::styled("Publisher:   ", theme.text_secondary()),
-                    Span::styled(
-                        pkg.publisher.as_deref().unwrap_or("N/A"),
-                        theme.text(),
-                    ),
+                    Span::styled(pkg.publisher.as_deref().unwrap_or("N/A"), theme.text()),
                 ]),
                 Line::from(vec![
                     Span::styled("Source:      ", theme.text_secondary()),
-                    Span::styled(
-                        pkg.source.as_deref().unwrap_or("pulumi"),
-                        theme.text(),
-                    ),
+                    Span::styled(pkg.source.as_deref().unwrap_or("pulumi"), theme.text()),
                 ]),
             ];
 
@@ -354,7 +363,8 @@ fn render_package_details(
             frame.render_widget(desc_block, chunks[1]);
 
             // Use readme_content if loaded, otherwise fall back to description
-            let description = pkg.readme_content
+            let description = pkg
+                .readme_content
                 .as_deref()
                 .or(pkg.description.as_deref())
                 .unwrap_or("No description available");
@@ -367,8 +377,8 @@ fn render_package_details(
             // Create scrollview
             let mut scroll_view = ScrollView::new(Size::new(desc_inner.width, scroll_height));
             let content_area = Rect::new(0, 0, desc_inner.width, scroll_height);
-            let content_para = Paragraph::new(desc_lines)
-                .wrap(ratatui::widgets::Wrap { trim: false });
+            let content_para =
+                Paragraph::new(desc_lines).wrap(ratatui::widgets::Wrap { trim: false });
             scroll_view.render_widget(content_para, content_area);
 
             frame.render_stateful_widget(scroll_view, desc_inner, scroll_state);
@@ -494,31 +504,25 @@ fn render_template_details(
                 ]),
                 Line::from(vec![
                     Span::styled("Version:     ", theme.text_secondary()),
-                    Span::styled(
-                        tmpl.version.as_deref().unwrap_or("N/A"),
-                        theme.info(),
-                    ),
+                    Span::styled(tmpl.version.as_deref().unwrap_or("N/A"), theme.info()),
                 ]),
                 Line::from(vec![
                     Span::styled("Language:    ", theme.text_secondary()),
-                    Span::styled(
-                        tmpl.language.as_deref().unwrap_or("N/A"),
-                        theme.text(),
-                    ),
+                    Span::styled(tmpl.language.as_deref().unwrap_or("N/A"), theme.text()),
                 ]),
                 Line::from(vec![
                     Span::styled("Runtime:     ", theme.text_secondary()),
                     Span::styled(
-                        tmpl.runtime.as_ref().map(|r| r.name.as_str()).unwrap_or("N/A"),
+                        tmpl.runtime
+                            .as_ref()
+                            .map(|r| r.name.as_str())
+                            .unwrap_or("N/A"),
                         theme.text(),
                     ),
                 ]),
                 Line::from(vec![
                     Span::styled("Publisher:   ", theme.text_secondary()),
-                    Span::styled(
-                        tmpl.publisher.as_deref().unwrap_or("N/A"),
-                        theme.text(),
-                    ),
+                    Span::styled(tmpl.publisher.as_deref().unwrap_or("N/A"), theme.text()),
                 ]),
             ];
 
@@ -535,7 +539,10 @@ fn render_template_details(
             let desc_inner = desc_block.inner(chunks[1]);
             frame.render_widget(desc_block, chunks[1]);
 
-            let description = tmpl.description.as_deref().unwrap_or("No description available");
+            let description = tmpl
+                .description
+                .as_deref()
+                .unwrap_or("No description available");
             let desc_lines = render_markdown_content(description, theme, "");
 
             // Calculate content height
@@ -545,8 +552,8 @@ fn render_template_details(
             // Create scrollview
             let mut scroll_view = ScrollView::new(Size::new(desc_inner.width, scroll_height));
             let content_area = Rect::new(0, 0, desc_inner.width, scroll_height);
-            let content_para = Paragraph::new(desc_lines)
-                .wrap(ratatui::widgets::Wrap { trim: false });
+            let content_para =
+                Paragraph::new(desc_lines).wrap(ratatui::widgets::Wrap { trim: false });
             scroll_view.render_widget(content_para, content_area);
 
             frame.render_stateful_widget(scroll_view, desc_inner, scroll_state);

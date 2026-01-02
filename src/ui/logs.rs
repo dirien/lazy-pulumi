@@ -10,11 +10,7 @@ use crate::theme::Theme;
 use crate::ui::centered_rect;
 
 /// Render the logs popup using TuiLoggerSmartWidget
-pub fn render_logs(
-    frame: &mut Frame,
-    theme: &Theme,
-    logger_state: &TuiWidgetState,
-) {
+pub fn render_logs(frame: &mut Frame, theme: &Theme, logger_state: &TuiWidgetState) {
     let area = centered_rect(90, 85, frame.area());
 
     // Clear background
@@ -23,7 +19,8 @@ pub fn render_logs(
     // Move events from hot buffer to widget buffer
     tui_logger::move_events();
 
-    let title = " Logs (h:toggle targets | f:focus | +/-:capture | </>:show | PgUp/Dn:scroll | Esc:close) ";
+    let title =
+        " Logs (h:toggle targets | f:focus | +/-:capture | </>:show | PgUp/Dn:scroll | Esc:close) ";
 
     // Create the smart widget with target selector and log view
     // Style it to match the Dracula theme

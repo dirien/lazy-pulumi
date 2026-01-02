@@ -10,11 +10,15 @@ use tui_scrollview::ScrollViewState;
 
 use crate::event::keys;
 use crate::startup::{check_pulumi_cli, check_pulumi_token, CheckStatus};
+use crate::ui::syntax::highlight_yaml;
 
 use super::types::{FocusMode, PlatformView, Tab};
 use super::App;
-use crate::ui::CommandsViewState;
-use crate::commands::{CommandExecution, CommandExecutionState, ExecutionMode, commands_by_category, spawn_command, can_run_command};
+use crate::commands::{
+    can_run_command, commands_by_category, spawn_command, CommandExecution, CommandExecutionState,
+    ExecutionMode,
+};
+use crate::ui::{extract_values, json_to_yaml, CommandsViewState};
 
 impl App {
     /// Handle key events
@@ -143,7 +147,9 @@ impl App {
 
         // Open organization selector with 'o' (but not in ESC tab where 'o' opens environments)
         // In ESC tab, use 'O' (uppercase) instead
-        if (keys::is_char(&key, 'o') && self.tab != Tab::Esc) || (keys::is_char(&key, 'O') && self.tab == Tab::Esc) {
+        if (keys::is_char(&key, 'o') && self.tab != Tab::Esc)
+            || (keys::is_char(&key, 'O') && self.tab == Tab::Esc)
+        {
             self.show_org_selector = true;
             // Select current org in list if present
             if let Some(ref current_org) = self.state.organization {
@@ -158,10 +164,8 @@ impl App {
             let old_tab = self.tab;
             self.tab = self.tab.next();
             // When switching to Neo tab, show task list unless there's an active task
-            if self.tab == Tab::Neo && old_tab != Tab::Neo {
-                if self.state.current_task_id.is_none() {
-                    self.neo_hide_task_list = false;
-                }
+            if self.tab == Tab::Neo && old_tab != Tab::Neo && self.state.current_task_id.is_none() {
+                self.neo_hide_task_list = false;
             }
             return;
         }
@@ -170,10 +174,8 @@ impl App {
             let old_tab = self.tab;
             self.tab = self.tab.previous();
             // When switching to Neo tab, show task list unless there's an active task
-            if self.tab == Tab::Neo && old_tab != Tab::Neo {
-                if self.state.current_task_id.is_none() {
-                    self.neo_hide_task_list = false;
-                }
+            if self.tab == Tab::Neo && old_tab != Tab::Neo && self.state.current_task_id.is_none() {
+                self.neo_hide_task_list = false;
             }
             return;
         }
@@ -390,14 +392,18 @@ impl App {
         else if keys::is_up(&key) {
             self.esc_list.previous();
             self.state.selected_env_yaml = None;
+            self.state.selected_env_yaml_highlighted = None;
             self.state.selected_env_values = None;
+            self.state.selected_env_values_highlighted = None;
             // Reset scroll when changing environments
             self.esc_definition_scroll = ScrollViewState::default();
             self.esc_values_scroll = ScrollViewState::default();
         } else if keys::is_down(&key) {
             self.esc_list.next();
             self.state.selected_env_yaml = None;
+            self.state.selected_env_yaml_highlighted = None;
             self.state.selected_env_values = None;
+            self.state.selected_env_values_highlighted = None;
             // Reset scroll when changing environments
             self.esc_definition_scroll = ScrollViewState::default();
             self.esc_values_scroll = ScrollViewState::default();
@@ -418,7 +424,9 @@ impl App {
 
                     log::debug!(
                         "Loading ESC environment definition: org={}, project={}, name={}",
-                        env.organization, env.project, env.name
+                        env.organization,
+                        env.project,
+                        env.name
                     );
 
                     match client
@@ -426,6 +434,9 @@ impl App {
                         .await
                     {
                         Ok(details) => {
+                            // Cache syntax-highlighted content when loading (not on every render)
+                            self.state.selected_env_yaml_highlighted =
+                                details.yaml.as_ref().map(|y| highlight_yaml(y));
                             self.state.selected_env_yaml = details.yaml;
                             self.esc_definition_scroll = ScrollViewState::default();
                             log::debug!("ESC environment definition loaded successfully");
@@ -448,7 +459,9 @@ impl App {
 
                     log::debug!(
                         "Opening ESC environment: org={}, project={}, name={}",
-                        env.organization, env.project, env.name
+                        env.organization,
+                        env.project,
+                        env.name
                     );
 
                     match client
@@ -456,6 +469,13 @@ impl App {
                         .await
                     {
                         Ok(response) => {
+                            // Cache syntax-highlighted content when loading (not on every render)
+                            self.state.selected_env_values_highlighted =
+                                response.values.as_ref().map(|v| {
+                                    let filtered = extract_values(v);
+                                    let yaml_str = json_to_yaml(&filtered);
+                                    highlight_yaml(&yaml_str)
+                                });
                             self.state.selected_env_values = response.values;
                             self.esc_values_scroll = ScrollViewState::default();
                             log::debug!("ESC environment opened and resolved successfully");
@@ -800,14 +820,18 @@ impl App {
         tokio::spawn(async move {
             // Token check is synchronous so we wrap it
             let status = check_pulumi_token();
-            let _ = tx.send(super::types::StartupCheckResult::TokenCheck(status)).await;
+            let _ = tx
+                .send(super::types::StartupCheckResult::TokenCheck(status))
+                .await;
         });
 
         // Spawn CLI check (async)
         let tx = self.startup_result_tx.clone();
         tokio::spawn(async move {
             let status = check_pulumi_cli().await;
-            let _ = tx.send(super::types::StartupCheckResult::CliCheck(status)).await;
+            let _ = tx
+                .send(super::types::StartupCheckResult::CliCheck(status))
+                .await;
         });
     }
 
@@ -950,9 +974,19 @@ impl App {
         } else {
             // Check for shortcut keys
             if let Some(c) = keys::get_char(&key) {
-                if let Some(cmd) = self.commands_command_list.items().iter().find(|cmd| cmd.shortcut == Some(c)) {
+                if let Some(cmd) = self
+                    .commands_command_list
+                    .items()
+                    .iter()
+                    .find(|cmd| cmd.shortcut == Some(c))
+                {
                     // Find and select the command
-                    if let Some(idx) = self.commands_command_list.items().iter().position(|x| x.name == cmd.name) {
+                    if let Some(idx) = self
+                        .commands_command_list
+                        .items()
+                        .iter()
+                        .position(|x| x.name == cmd.name)
+                    {
                         self.commands_command_list.select(Some(idx));
                         self.start_command_execution();
                     }
@@ -982,7 +1016,8 @@ impl App {
             // Move to next parameter
             if !self.commands_param_inputs.is_empty() {
                 self.commands_param_inputs[self.commands_param_focus_index].set_focused(false);
-                self.commands_param_focus_index = (self.commands_param_focus_index + 1) % self.commands_param_inputs.len();
+                self.commands_param_focus_index =
+                    (self.commands_param_focus_index + 1) % self.commands_param_inputs.len();
                 self.commands_param_inputs[self.commands_param_focus_index].set_focused(true);
             }
         } else if keys::is_backtab(&key) {
@@ -998,7 +1033,10 @@ impl App {
             }
         } else {
             // Pass to the focused input
-            if let Some(input) = self.commands_param_inputs.get_mut(self.commands_param_focus_index) {
+            if let Some(input) = self
+                .commands_param_inputs
+                .get_mut(self.commands_param_focus_index)
+            {
                 input.handle_key(&key);
             }
         }
@@ -1073,13 +1111,17 @@ impl App {
             let execution = CommandExecution::new(cmd);
 
             // Create input fields for parameters
-            self.commands_param_inputs = cmd.params.iter().map(|param| {
-                let mut input = TextInput::new();
-                if let Some(default) = param.default {
-                    input.set_value(default.to_string());
-                }
-                input
-            }).collect();
+            self.commands_param_inputs = cmd
+                .params
+                .iter()
+                .map(|param| {
+                    let mut input = TextInput::new();
+                    if let Some(default) = param.default {
+                        input.set_value(default.to_string());
+                    }
+                    input
+                })
+                .collect();
 
             // Set focus to first parameter if any
             self.commands_param_focus_index = 0;

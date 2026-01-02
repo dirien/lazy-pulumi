@@ -24,7 +24,10 @@ pub enum DataLoadResult {
     /// Resource count over time (for dashboard chart)
     ResourceSummary(Vec<ResourceSummaryPoint>),
     /// README content loaded for a package (key, content)
-    ReadmeContent { package_key: String, content: String },
+    ReadmeContent {
+        package_key: String,
+        content: String,
+    },
     Error(String),
 }
 
@@ -69,7 +72,14 @@ pub enum Tab {
 impl Tab {
     pub fn all() -> &'static [Tab] {
         // Dashboard, Commands, Neo, then the rest
-        &[Tab::Dashboard, Tab::Commands, Tab::Neo, Tab::Stacks, Tab::Esc, Tab::Platform]
+        &[
+            Tab::Dashboard,
+            Tab::Commands,
+            Tab::Neo,
+            Tab::Stacks,
+            Tab::Esc,
+            Tab::Platform,
+        ]
     }
 
     pub fn title(&self) -> &'static str {
@@ -194,6 +204,7 @@ impl PlatformView {
 }
 
 /// Application state - holds all data fetched from APIs
+#[derive(Default)]
 pub struct AppState {
     // Data
     pub stacks: Vec<Stack>,
@@ -210,7 +221,11 @@ pub struct AppState {
 
     // Selected ESC env details
     pub selected_env_yaml: Option<String>,
+    /// Cached syntax-highlighted lines for YAML definition (computed once when yaml changes)
+    pub selected_env_yaml_highlighted: Option<Vec<ratatui::text::Line<'static>>>,
     pub selected_env_values: Option<serde_json::Value>,
+    /// Cached syntax-highlighted lines for resolved values (computed once when values change)
+    pub selected_env_values_highlighted: Option<Vec<ratatui::text::Line<'static>>>,
 
     // Neo conversation
     pub neo_messages: Vec<NeoMessage>,
@@ -226,28 +241,4 @@ pub struct AppState {
     // Organization
     pub organization: Option<String>,
     pub organizations: Vec<String>,
-}
-
-impl Default for AppState {
-    fn default() -> Self {
-        Self {
-            stacks: Vec::new(),
-            esc_environments: Vec::new(),
-            neo_tasks: Vec::new(),
-            resources: Vec::new(),
-            recent_updates: Vec::new(),
-            resource_summary: Vec::new(),
-            selected_stack_updates: Vec::new(),
-            selected_env_yaml: None,
-            selected_env_values: None,
-            neo_messages: Vec::new(),
-            current_task_id: None,
-            neo_slash_commands: Vec::new(),
-            services: Vec::new(),
-            registry_packages: Vec::new(),
-            registry_templates: Vec::new(),
-            organization: None,
-            organizations: Vec::new(),
-        }
-    }
 }

@@ -1,7 +1,7 @@
 //! Multi-line text editor component for YAML editing
 
-use crossterm::event::KeyEvent;
 use crate::event::keys;
+use crossterm::event::KeyEvent;
 
 /// A multi-line text editor with cursor support
 #[derive(Debug, Clone)]
@@ -48,7 +48,11 @@ impl TextEditor {
         };
 
         // Ensure at least one line
-        let lines = if lines.is_empty() { vec![String::new()] } else { lines };
+        let lines = if lines.is_empty() {
+            vec![String::new()]
+        } else {
+            lines
+        };
 
         Self {
             lines,

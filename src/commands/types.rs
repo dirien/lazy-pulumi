@@ -331,7 +331,14 @@ pub static PULUMI_COMMANDS: &[PulumiCommand] = &[
         cli_args: &["up"],
         description: "Deploy infrastructure changes",
         category: CommandCategory::StackOperations,
-        params: &[PARAM_CWD, PARAM_STACK, PARAM_YES, PARAM_MESSAGE, PARAM_TARGET, PARAM_DIFF],
+        params: &[
+            PARAM_CWD,
+            PARAM_STACK,
+            PARAM_YES,
+            PARAM_MESSAGE,
+            PARAM_TARGET,
+            PARAM_DIFF,
+        ],
         needs_confirmation: true,
         execution_mode: ExecutionMode::Streaming,
         shortcut: Some('u'),
@@ -392,7 +399,6 @@ pub static PULUMI_COMMANDS: &[PulumiCommand] = &[
         shortcut: Some('w'),
         supports_cwd: true,
     },
-
     // Stack Management
     PulumiCommand {
         name: "stack ls",
@@ -476,7 +482,13 @@ pub static PULUMI_COMMANDS: &[PulumiCommand] = &[
         cli_args: &["config", "set"],
         description: "Set a config value",
         category: CommandCategory::StackManagement,
-        params: &[PARAM_CWD, PARAM_CONFIG_KEY, PARAM_CONFIG_VALUE, PARAM_SECRET, PARAM_STACK],
+        params: &[
+            PARAM_CWD,
+            PARAM_CONFIG_KEY,
+            PARAM_CONFIG_VALUE,
+            PARAM_SECRET,
+            PARAM_STACK,
+        ],
         needs_confirmation: false,
         execution_mode: ExecutionMode::Quick,
         shortcut: None,
@@ -515,14 +527,21 @@ pub static PULUMI_COMMANDS: &[PulumiCommand] = &[
         shortcut: None,
         supports_cwd: true,
     },
-
     // Project Management
     PulumiCommand {
         name: "new",
         cli_args: &["new", "--force"],
         description: "Create a new Pulumi project",
         category: CommandCategory::ProjectManagement,
-        params: &[PARAM_CWD, PARAM_TEMPLATE, PARAM_PROJECT_NAME, PARAM_NEW_STACK, PARAM_DESCRIPTION, PARAM_GENERATE_ONLY, PARAM_YES],
+        params: &[
+            PARAM_CWD,
+            PARAM_TEMPLATE,
+            PARAM_PROJECT_NAME,
+            PARAM_NEW_STACK,
+            PARAM_DESCRIPTION,
+            PARAM_GENERATE_ONLY,
+            PARAM_YES,
+        ],
         needs_confirmation: false,
         execution_mode: ExecutionMode::Streaming,
         shortcut: Some('n'),
@@ -561,7 +580,6 @@ pub static PULUMI_COMMANDS: &[PulumiCommand] = &[
         shortcut: Some('l'),
         supports_cwd: true,
     },
-
     // Auth & Organization
     PulumiCommand {
         name: "login",
@@ -618,7 +636,6 @@ pub static PULUMI_COMMANDS: &[PulumiCommand] = &[
         shortcut: None,
         supports_cwd: true,
     },
-
     // Utilities
     PulumiCommand {
         name: "version",
@@ -744,7 +761,7 @@ impl CommandExecution {
         self.param_values
             .get("cwd")
             .filter(|v| !v.is_empty())
-            .map(|v| v.clone())
+            .cloned()
             .or_else(|| {
                 std::env::current_dir()
                     .ok()
@@ -755,7 +772,12 @@ impl CommandExecution {
     /// Build the full command line arguments
     /// Note: The "cwd" parameter is not included here as it's handled via current_dir()
     pub fn build_args(&self) -> Vec<String> {
-        let mut args: Vec<String> = self.command.cli_args.iter().map(|s| s.to_string()).collect();
+        let mut args: Vec<String> = self
+            .command
+            .cli_args
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
 
         for param in self.command.params {
             // Skip cwd parameter - it's handled separately via current_dir()
@@ -800,7 +822,8 @@ impl CommandExecution {
     /// Get the display command string with parameters
     pub fn display_with_params(&self) -> String {
         let args = self.build_args();
-        let cwd_prefix = self.get_working_directory()
+        let cwd_prefix = self
+            .get_working_directory()
             .map(|d| format!("(in {}) ", d))
             .unwrap_or_default();
         format!("{}pulumi {}", cwd_prefix, args.join(" "))

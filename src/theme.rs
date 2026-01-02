@@ -132,30 +132,30 @@ impl Default for Theme {
     fn default() -> Self {
         Self {
             // Pulumi brand colors for accents
-            primary: brand::VIOLET,               // Pulumi Violet - main accent
-            secondary: brand::BLUE,               // Pulumi Blue - secondary accent
-            accent: brand::YELLOW,                // Pulumi Yellow - highlights/accents
+            primary: brand::VIOLET, // Pulumi Violet - main accent
+            secondary: brand::BLUE, // Pulumi Blue - secondary accent
+            accent: brand::YELLOW,  // Pulumi Yellow - highlights/accents
 
             // Dracula background colors
-            bg_dark: dracula::BACKGROUND,         // #282A36 - main background
-            bg_medium: dracula::CURRENT_LINE,     // #44475A - elevated surfaces
-            bg_light: Color::Rgb(55, 58, 77),     // Slightly lighter for selection
+            bg_dark: dracula::BACKGROUND, // #282A36 - main background
+            bg_medium: dracula::CURRENT_LINE, // #44475A - elevated surfaces
+            bg_light: Color::Rgb(55, 58, 77), // Slightly lighter for selection
 
             // Dracula text colors
-            text_primary: dracula::FOREGROUND,    // #F8F8F2 - main text
+            text_primary: dracula::FOREGROUND, // #F8F8F2 - main text
             text_secondary: Color::Rgb(200, 200, 210), // Slightly dimmed
-            text_muted: dracula::COMMENT,         // #6272A4 - comments/muted
+            text_muted: dracula::COMMENT,      // #6272A4 - comments/muted
 
             // Status colors (Dracula colors for semantics, Pulumi for brand)
-            success: dracula::GREEN,              // #50FA7B - Dracula green
-            warning: brand::YELLOW,               // Pulumi Yellow (warmer than Dracula)
-            error: brand::SALMON,                 // Pulumi Salmon (softer than Dracula red)
-            info: dracula::CYAN,                  // #8BE9FD - Dracula cyan
+            success: dracula::GREEN, // #50FA7B - Dracula green
+            warning: brand::YELLOW,  // Pulumi Yellow (warmer than Dracula)
+            error: brand::SALMON,    // Pulumi Salmon (softer than Dracula red)
+            info: dracula::CYAN,     // #8BE9FD - Dracula cyan
 
             // Special accents (Pulumi brand)
-            highlight: brand::FUCHSIA,            // Pulumi Fuchsia for highlights
-            border: dracula::COMMENT,             // #6272A4 - Dracula comment for borders
-            border_focused: brand::VIOLET,        // Pulumi Violet for focused borders
+            highlight: brand::FUCHSIA,     // Pulumi Fuchsia for highlights
+            border: dracula::COMMENT,      // #6272A4 - Dracula comment for borders
+            border_focused: brand::VIOLET, // Pulumi Violet for focused borders
 
             // Direct color access
             colors: Colors::default(),
@@ -293,9 +293,7 @@ impl Theme {
 
     /// Input cursor style
     pub fn cursor(&self) -> Style {
-        Style::default()
-            .bg(self.primary)
-            .fg(self.bg_dark)
+        Style::default().bg(self.primary).fg(self.bg_dark)
     }
 
     /// Status bar background

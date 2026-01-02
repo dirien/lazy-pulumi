@@ -4,14 +4,15 @@
 //! with styled text for Ratatui widgets.
 
 use ratatui::{
+    prelude::*,
     style::Modifier,
     text::{Line, Span},
-    prelude::*,
 };
 
 use crate::theme::{symbols, Theme};
 
 /// Parse markdown content in a single line into styled spans (returns owned data)
+#[allow(clippy::while_let_on_iterator)]
 pub fn parse_markdown_line(text: &str, theme: &Theme) -> Vec<Span<'static>> {
     let mut spans = Vec::new();
     let mut chars = text.char_indices().peekable();
@@ -26,7 +27,10 @@ pub fn parse_markdown_line(text: &str, theme: &Theme) -> Vec<Span<'static>> {
                         // Double marker - bold
                         chars.next(); // consume second marker
                         if !current_text.is_empty() {
-                            spans.push(Span::styled(std::mem::take(&mut current_text), theme.text()));
+                            spans.push(Span::styled(
+                                std::mem::take(&mut current_text),
+                                theme.text(),
+                            ));
                         }
                         // Find closing **
                         let mut bold_text = String::new();
@@ -44,7 +48,10 @@ pub fn parse_markdown_line(text: &str, theme: &Theme) -> Vec<Span<'static>> {
                             bold_text.push(bc);
                         }
                         if found_end && !bold_text.is_empty() {
-                            spans.push(Span::styled(bold_text, theme.text().add_modifier(Modifier::BOLD)));
+                            spans.push(Span::styled(
+                                bold_text,
+                                theme.text().add_modifier(Modifier::BOLD),
+                            ));
                         } else {
                             current_text.push(c);
                             current_text.push(c);
@@ -53,7 +60,10 @@ pub fn parse_markdown_line(text: &str, theme: &Theme) -> Vec<Span<'static>> {
                     } else {
                         // Single marker - italic
                         if !current_text.is_empty() {
-                            spans.push(Span::styled(std::mem::take(&mut current_text), theme.text()));
+                            spans.push(Span::styled(
+                                std::mem::take(&mut current_text),
+                                theme.text(),
+                            ));
                         }
                         let mut italic_text = String::new();
                         let mut found_end = false;
@@ -65,7 +75,10 @@ pub fn parse_markdown_line(text: &str, theme: &Theme) -> Vec<Span<'static>> {
                             italic_text.push(ic);
                         }
                         if found_end && !italic_text.is_empty() {
-                            spans.push(Span::styled(italic_text, theme.text().add_modifier(Modifier::ITALIC)));
+                            spans.push(Span::styled(
+                                italic_text,
+                                theme.text().add_modifier(Modifier::ITALIC),
+                            ));
                         } else {
                             current_text.push(c);
                             current_text.push_str(&italic_text);
@@ -90,7 +103,10 @@ pub fn parse_markdown_line(text: &str, theme: &Theme) -> Vec<Span<'static>> {
                 } else {
                     // Inline code
                     if !current_text.is_empty() {
-                        spans.push(Span::styled(std::mem::take(&mut current_text), theme.text()));
+                        spans.push(Span::styled(
+                            std::mem::take(&mut current_text),
+                            theme.text(),
+                        ));
                     }
                     let mut code_text = String::new();
                     let mut found_end = false;
@@ -104,9 +120,7 @@ pub fn parse_markdown_line(text: &str, theme: &Theme) -> Vec<Span<'static>> {
                     if found_end {
                         spans.push(Span::styled(
                             format!(" {} ", code_text),
-                            Style::default()
-                                .fg(theme.accent)
-                                .bg(theme.bg_light)
+                            Style::default().fg(theme.accent).bg(theme.bg_light),
                         ));
                     } else {
                         current_text.push('`');
@@ -156,7 +170,10 @@ pub fn render_markdown_content(content: &str, theme: &Theme, indent: &str) -> Ve
                     } else {
                         lines.push(Line::from(vec![
                             Span::styled(indent.to_string(), theme.text()),
-                            Span::styled("─────────────────────────".to_string(), theme.text_muted()),
+                            Span::styled(
+                                "─────────────────────────".to_string(),
+                                theme.text_muted(),
+                            ),
                         ]));
                     }
                     for code_line in code_lines.drain(..) {
@@ -164,7 +181,7 @@ pub fn render_markdown_content(content: &str, theme: &Theme, indent: &str) -> Ve
                             Span::styled(indent.to_string(), theme.text()),
                             Span::styled(
                                 format!("  {}", code_line),
-                                Style::default().fg(theme.accent).bg(theme.bg_medium)
+                                Style::default().fg(theme.accent).bg(theme.bg_medium),
                             ),
                         ]));
                     }
@@ -194,7 +211,9 @@ pub fn render_markdown_content(content: &str, theme: &Theme, indent: &str) -> Ve
                 Span::styled(indent.to_string(), theme.text()),
                 Span::styled(
                     trimmed.trim_start_matches("### ").to_string(),
-                    theme.text().add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
+                    theme
+                        .text()
+                        .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
                 ),
             ]));
         } else if trimmed.starts_with("## ") {
@@ -202,7 +221,7 @@ pub fn render_markdown_content(content: &str, theme: &Theme, indent: &str) -> Ve
                 Span::styled(indent.to_string(), theme.text()),
                 Span::styled(
                     trimmed.trim_start_matches("## ").to_string(),
-                    theme.primary().add_modifier(Modifier::BOLD)
+                    theme.primary().add_modifier(Modifier::BOLD),
                 ),
             ]));
         } else if trimmed.starts_with("# ") {
@@ -210,7 +229,9 @@ pub fn render_markdown_content(content: &str, theme: &Theme, indent: &str) -> Ve
                 Span::styled(indent.to_string(), theme.text()),
                 Span::styled(
                     trimmed.trim_start_matches("# ").to_string(),
-                    theme.primary().add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
+                    theme
+                        .primary()
+                        .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
                 ),
             ]));
         }
@@ -225,7 +246,11 @@ pub fn render_markdown_content(content: &str, theme: &Theme, indent: &str) -> Ve
             lines.push(Line::from(line_spans));
         }
         // Handle numbered lists
-        else if trimmed.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false)
+        else if trimmed
+            .chars()
+            .next()
+            .map(|c| c.is_ascii_digit())
+            .unwrap_or(false)
             && trimmed.contains(". ")
         {
             if let Some(dot_pos) = trimmed.find(". ") {
@@ -262,7 +287,7 @@ pub fn render_markdown_content(content: &str, theme: &Theme, indent: &str) -> Ve
                 Span::styled(indent.to_string(), theme.text()),
                 Span::styled(
                     format!("  {}", code_line),
-                    Style::default().fg(theme.accent).bg(theme.bg_medium)
+                    Style::default().fg(theme.accent).bg(theme.bg_medium),
                 ),
             ]));
         }

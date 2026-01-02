@@ -25,7 +25,13 @@ pub fn render_stacks_view(
         .split(area);
 
     render_stacks_list(frame, theme, chunks[0], stacks);
-    render_stack_details(frame, theme, chunks[1], stacks.selected(), selected_stack_updates);
+    render_stack_details(
+        frame,
+        theme,
+        chunks[1],
+        stacks.selected(),
+        selected_stack_updates,
+    );
 }
 
 fn render_stacks_list(
@@ -176,12 +182,8 @@ fn render_stack_details(
                     _ => theme.warning(),
                 };
 
-                Row::new(vec![
-                    format!("v{}", version),
-                    result.clone(),
-                    time.clone(),
-                ])
-                .style(result_style)
+                Row::new(vec![format!("v{}", version), result.clone(), time.clone()])
+                    .style(result_style)
             })
             .collect();
 

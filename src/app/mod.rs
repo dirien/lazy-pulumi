@@ -21,18 +21,19 @@ use tokio::sync::mpsc;
 use tui_scrollview::ScrollViewState;
 
 use crate::api::{
-    EscEnvironmentSummary, NeoTask, PulumiClient, RegistryPackage, RegistryTemplate, Service,
-    Stack,
+    EscEnvironmentSummary, NeoTask, PulumiClient, RegistryPackage, RegistryTemplate, Service, Stack,
 };
-use crate::commands::{CommandCategory, CommandExecution, CommandResult, PulumiCommand, commands_by_category};
+use crate::commands::{
+    commands_by_category, CommandCategory, CommandExecution, CommandResult, PulumiCommand,
+};
 use crate::components::{Spinner, StatefulList, TextEditor, TextInput};
-use tui_logger::TuiWidgetState;
 use crate::config::Config;
 use crate::event::{Event, EventHandler};
 use crate::startup::{check_pulumi_cli, check_pulumi_token, StartupChecks};
 use crate::theme::Theme;
 use crate::tui::{self, Tui};
 use crate::ui;
+use tui_logger::TuiWidgetState;
 
 /// Main application
 pub struct App {
@@ -528,12 +529,20 @@ impl App {
                         frame,
                         theme,
                         content_area,
-                        esc_list,
-                        state.selected_env_yaml.as_deref(),
-                        state.selected_env_values.as_ref(),
-                        esc_pane,
-                        esc_definition_scroll,
-                        esc_values_scroll,
+                        ui::EscViewProps {
+                            environments: esc_list,
+                            selected_env_yaml: state.selected_env_yaml.as_deref(),
+                            selected_env_yaml_highlighted: state
+                                .selected_env_yaml_highlighted
+                                .as_ref(),
+                            selected_env_values: state.selected_env_values.as_ref(),
+                            selected_env_values_highlighted: state
+                                .selected_env_values_highlighted
+                                .as_ref(),
+                            focused_pane: esc_pane,
+                            definition_scroll: esc_definition_scroll,
+                            values_scroll: esc_values_scroll,
+                        },
                     );
                 }
                 Tab::Neo => {
@@ -541,19 +550,23 @@ impl App {
                         frame,
                         theme,
                         content_area,
-                        neo_tasks_list,
-                        &state.neo_messages,
-                        neo_input,
-                        neo_scroll_state,
-                        &neo_auto_scroll,
-                        neo_is_thinking,
-                        spinner_char,
-                        neo_hide_task_list,
-                        neo_show_command_picker,
-                        neo_filtered_commands,
-                        neo_command_picker_index,
-                        &state.neo_slash_commands,
-                        neo_pending_commands,
+                        ui::NeoViewProps {
+                            tasks: neo_tasks_list,
+                            messages: &state.neo_messages,
+                            input: neo_input,
+                            scroll_state: neo_scroll_state,
+                            auto_scroll: &neo_auto_scroll,
+                            is_loading: neo_is_thinking,
+                            spinner_char,
+                            hide_task_list: neo_hide_task_list,
+                            command_picker: ui::CommandPickerProps {
+                                show: neo_show_command_picker,
+                                filtered_commands: neo_filtered_commands,
+                                index: neo_command_picker_index,
+                                all_commands: &state.neo_slash_commands,
+                                pending_commands: neo_pending_commands,
+                            },
+                        },
                     );
                 }
                 Tab::Platform => {
@@ -561,11 +574,13 @@ impl App {
                         frame,
                         theme,
                         content_area,
-                        platform_view,
-                        services_list,
-                        packages_list,
-                        templates_list,
-                        platform_desc_scroll_state,
+                        ui::PlatformViewProps {
+                            current_view: platform_view,
+                            services: services_list,
+                            packages: packages_list,
+                            templates: templates_list,
+                            description_scroll_state: platform_desc_scroll_state,
+                        },
                     );
                 }
                 Tab::Commands => {
@@ -573,15 +588,17 @@ impl App {
                         frame,
                         theme,
                         content_area,
-                        commands_view_state,
-                        commands_category_list,
-                        commands_command_list,
-                        current_command_execution,
-                        commands_param_inputs,
-                        commands_param_focus_index,
-                        commands_output_scroll,
-                        commands_filter_input,
-                        commands_is_filtering,
+                        ui::CommandsViewProps {
+                            view_state: commands_view_state,
+                            category_list: commands_category_list,
+                            command_list: commands_command_list,
+                            current_execution: current_command_execution,
+                            param_inputs: commands_param_inputs,
+                            param_focus_index: commands_param_focus_index,
+                            output_scroll: commands_output_scroll,
+                            filter_input: commands_filter_input,
+                            is_filtering: commands_is_filtering,
+                        },
                     );
                 }
             }

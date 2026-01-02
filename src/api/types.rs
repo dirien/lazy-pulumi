@@ -40,7 +40,10 @@ pub struct Stack {
 impl Stack {
     #[allow(dead_code)]
     pub fn full_name(&self) -> String {
-        format!("{}/{}/{}", self.org_name, self.project_name, self.stack_name)
+        format!(
+            "{}/{}/{}",
+            self.org_name, self.project_name, self.stack_name
+        )
     }
 
     pub fn last_update_formatted(&self) -> String {
@@ -680,7 +683,9 @@ pub struct RegistryTemplate {
 
 impl RegistryTemplate {
     pub fn display(&self) -> String {
-        self.display_name.clone().unwrap_or_else(|| self.name.clone())
+        self.display_name
+            .clone()
+            .unwrap_or_else(|| self.name.clone())
     }
 
     pub fn full_name(&self) -> String {

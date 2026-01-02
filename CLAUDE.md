@@ -68,3 +68,44 @@ src/
 - **State**: `FocusMode::Normal` vs `FocusMode::Input` for navigation vs text input
 - **Async**: Uses tokio channels for background operations
 - **Logging**: Press `l` globally to open log viewer (tui-logger)
+
+## Code Quality Guidelines
+
+### Pre-Commit Checklist
+
+Before committing any code changes, run these commands and ensure they all pass:
+
+```bash
+cargo test                    # All tests must pass
+cargo clippy -- -D warnings   # No clippy warnings allowed
+cargo fmt --check             # Code must be formatted
+```
+
+### Rust Best Practices
+
+1. **Error Handling**
+   - Never use `.unwrap()` in library code - use `.expect("descriptive message")` or proper error handling
+   - Use `.expect()` only for invariants with descriptive messages explaining why it can't fail
+   - Prefer `Result<T, E>` for recoverable errors
+
+2. **Code Style**
+   - Run `cargo fmt` before committing
+   - Keep functions focused and small
+   - Use descriptive variable and function names
+   - Document public APIs with `///` doc comments
+
+3. **Clippy Compliance**
+   - All code must pass `cargo clippy -- -D warnings`
+   - For justified exceptions, use `#[allow(clippy::lint_name)]` with a comment explaining why
+   - Common allowed lints in this codebase:
+     - `#[allow(clippy::too_many_arguments)]` - for render functions that need many parameters
+
+4. **Performance**
+   - Avoid unnecessary allocations in hot paths
+   - Use `&str` instead of `String` when possible
+   - Prefer iterators over collecting into vectors when not needed
+
+5. **Testing**
+   - Add unit tests for new functions and types
+   - Test edge cases and error conditions
+   - Keep tests focused and fast

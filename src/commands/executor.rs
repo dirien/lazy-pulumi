@@ -177,21 +177,16 @@ pub fn spawn_command(execution: &CommandExecution, tx: mpsc::Sender<CommandResul
         });
 
         // Forward results from sync channel to async channel
-        loop {
-            match sync_rx.recv() {
-                Ok(result) => {
-                    let is_terminal = matches!(
-                        result,
-                        CommandResult::Completed { .. } | CommandResult::Failed(_)
-                    );
-                    if tx.send(result).await.is_err() {
-                        break;
-                    }
-                    if is_terminal {
-                        break;
-                    }
-                }
-                Err(_) => break,
+        while let Ok(result) = sync_rx.recv() {
+            let is_terminal = matches!(
+                result,
+                CommandResult::Completed { .. } | CommandResult::Failed(_)
+            );
+            if tx.send(result).await.is_err() {
+                break;
+            }
+            if is_terminal {
+                break;
             }
         }
 
@@ -222,8 +217,14 @@ fn is_duplicate_progress_line(prev: &str, current: &str) -> bool {
         if prev_parts[0] == curr_parts[0] && prev_parts[1] == curr_parts[1] {
             // Check if the last part is a status indicator
             let statuses = ["running", "creating", "updating", "deleting", "reading"];
-            let prev_has_status = prev_parts.last().map(|s| statuses.contains(s)).unwrap_or(false);
-            let curr_has_status = curr_parts.last().map(|s| statuses.contains(s)).unwrap_or(false);
+            let prev_has_status = prev_parts
+                .last()
+                .map(|s| statuses.contains(s))
+                .unwrap_or(false);
+            let curr_has_status = curr_parts
+                .last()
+                .map(|s| statuses.contains(s))
+                .unwrap_or(false);
             if prev_has_status || curr_has_status {
                 return true;
             }
@@ -277,7 +278,7 @@ fn strip_ansi_codes(text: &str) -> String {
             // ESC character - skip the escape sequence
             if chars.peek() == Some(&'[') {
                 chars.next(); // consume '['
-                // Skip until we find a letter (end of CSI sequence)
+                              // Skip until we find a letter (end of CSI sequence)
                 while let Some(&next) = chars.peek() {
                     chars.next();
                     if next.is_ascii_alphabetic() || next == 'm' || next == 'K' || next == 'H' {
@@ -351,7 +352,8 @@ pub fn update_execution_state(execution: &mut CommandExecution, result: CommandR
             if exit_code == 0 {
                 execution.state = CommandExecutionState::Completed;
             } else {
-                execution.state = CommandExecutionState::Failed(format!("Exit code: {}", exit_code));
+                execution.state =
+                    CommandExecutionState::Failed(format!("Exit code: {}", exit_code));
             }
         }
         CommandResult::Failed(error) => {
