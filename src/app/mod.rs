@@ -11,7 +11,10 @@ mod handlers;
 mod neo;
 mod types;
 
-pub use types::{AppState, DataLoadResult, EscPane, FocusMode, NeoAsyncResult, PlatformView, Tab};
+pub use types::{
+    AppState, DataLoadResult, EscPane, FocusMode, NeoAsyncResult, PlatformView,
+    SlashCommandsDialogView, Tab,
+};
 
 use color_eyre::Result;
 use std::sync::atomic::AtomicBool;
@@ -162,6 +165,32 @@ pub struct App {
     /// Pending slash commands that have been inserted but not yet sent
     pub(super) neo_pending_commands: Vec<crate::api::NeoSlashCommand>,
 
+    // Slash commands management dialog state
+    /// Show slash commands management dialog
+    pub(super) show_slash_commands_dialog: bool,
+    /// Current view state of the slash commands dialog
+    pub(super) slash_commands_dialog_view: SlashCommandsDialogView,
+    /// List of slash commands for the dialog
+    pub(super) slash_commands_list: StatefulList<crate::api::NeoSlashCommand>,
+    /// Selected command detail (for viewing)
+    pub(super) slash_command_detail: Option<crate::api::NeoSlashCommand>,
+    /// Create command form - name input
+    pub(super) slash_cmd_create_name: TextInput,
+    /// Create command form - description input
+    pub(super) slash_cmd_create_description: TextInput,
+    /// Create command form - prompt editor
+    pub(super) slash_cmd_create_prompt: TextEditor,
+    /// Create command form - which field is focused (0=name, 1=description, 2=prompt)
+    pub(super) slash_cmd_create_focus: usize,
+    /// Scroll state for command detail/prompt view
+    pub(super) slash_cmd_detail_scroll: ScrollViewState,
+    /// Edit command form - description input
+    pub(super) slash_cmd_edit_description: TextInput,
+    /// Edit command form - prompt editor
+    pub(super) slash_cmd_edit_prompt: TextEditor,
+    /// Edit command form - which field is focused (0=description, 1=prompt)
+    pub(super) slash_cmd_edit_focus: usize,
+
     /// Channel for receiving async Neo results
     pub(super) neo_result_rx: mpsc::Receiver<NeoAsyncResult>,
     /// Channel sender for Neo async tasks (wrapped in Arc for cloning)
@@ -305,6 +334,19 @@ impl App {
             neo_filtered_commands: Vec::new(),
             neo_command_picker_index: 0,
             neo_pending_commands: Vec::new(),
+            // Slash commands management dialog
+            show_slash_commands_dialog: false,
+            slash_commands_dialog_view: SlashCommandsDialogView::default(),
+            slash_commands_list: StatefulList::new(),
+            slash_command_detail: None,
+            slash_cmd_create_name: TextInput::new(),
+            slash_cmd_create_description: TextInput::new(),
+            slash_cmd_create_prompt: TextEditor::new(),
+            slash_cmd_create_focus: 0,
+            slash_cmd_detail_scroll: ScrollViewState::default(),
+            slash_cmd_edit_description: TextInput::new(),
+            slash_cmd_edit_prompt: TextEditor::new(),
+            slash_cmd_edit_focus: 0,
             neo_result_rx,
             neo_result_tx,
             data_result_rx,
@@ -427,6 +469,8 @@ impl App {
         let show_logs = self.show_logs;
         let show_neo_details = self.show_neo_details;
         let show_esc_editor = self.show_esc_editor;
+        let show_slash_commands_dialog = self.show_slash_commands_dialog;
+        let slash_commands_dialog_view = self.slash_commands_dialog_view;
         let esc_editor = &self.esc_editor;
         let esc_editing_env = self.esc_editing_env.clone();
         let logger_state = &self.logger_state;
@@ -455,6 +499,18 @@ impl App {
         let neo_filtered_commands = &self.neo_filtered_commands;
         let neo_command_picker_index = self.neo_command_picker_index;
         let neo_pending_commands = &self.neo_pending_commands;
+
+        // Slash commands dialog state
+        let slash_commands_list = &mut self.slash_commands_list;
+        let slash_command_detail = self.slash_command_detail.as_ref();
+        let slash_cmd_create_name = &self.slash_cmd_create_name;
+        let slash_cmd_create_description = &self.slash_cmd_create_description;
+        let slash_cmd_create_prompt = &self.slash_cmd_create_prompt;
+        let slash_cmd_create_focus = self.slash_cmd_create_focus;
+        let slash_cmd_detail_scroll = &mut self.slash_cmd_detail_scroll;
+        let slash_cmd_edit_description = &self.slash_cmd_edit_description;
+        let slash_cmd_edit_prompt = &self.slash_cmd_edit_prompt;
+        let slash_cmd_edit_focus = self.slash_cmd_edit_focus;
 
         // ESC detail pane state
         let esc_pane = self.esc_pane;
@@ -637,6 +693,27 @@ impl App {
                 ui::render_esc_editor(frame, theme, esc_editor, &env_name);
             }
 
+            // Slash commands management dialog
+            if show_slash_commands_dialog {
+                ui::render_slash_commands_dialog(
+                    frame,
+                    theme,
+                    ui::SlashCommandsDialogProps {
+                        view: slash_commands_dialog_view,
+                        commands: slash_commands_list,
+                        selected_detail: slash_command_detail,
+                        create_name: slash_cmd_create_name,
+                        create_description: slash_cmd_create_description,
+                        create_prompt: slash_cmd_create_prompt,
+                        create_focus: slash_cmd_create_focus,
+                        detail_scroll: slash_cmd_detail_scroll,
+                        edit_description: slash_cmd_edit_description,
+                        edit_prompt: slash_cmd_edit_prompt,
+                        edit_focus: slash_cmd_edit_focus,
+                    },
+                );
+            }
+
             // Error popup
             if let Some(ref error) = error_msg {
                 ui::render_error_popup(frame, theme, error);
@@ -659,6 +736,27 @@ impl App {
 
         if self.show_neo_details {
             return "Press d or Esc to close details".to_string();
+        }
+
+        if self.show_slash_commands_dialog {
+            return match self.slash_commands_dialog_view {
+                SlashCommandsDialogView::List => {
+                    "↑↓: navigate | Enter: view | n: new | e: edit | d: delete (custom) | Esc: close"
+                        .to_string()
+                }
+                SlashCommandsDialogView::Detail => {
+                    "j/k: scroll | e: edit | Esc: back to list".to_string()
+                }
+                SlashCommandsDialogView::Create => {
+                    "Tab: next field | Shift+Tab: prev | Ctrl+S: create | Esc: cancel".to_string()
+                }
+                SlashCommandsDialogView::Edit => {
+                    "Tab: next field | Shift+Tab: prev | Ctrl+S: save | Esc: cancel".to_string()
+                }
+                SlashCommandsDialogView::ConfirmDelete => {
+                    "y: confirm delete | n/Esc: cancel".to_string()
+                }
+            };
         }
 
         if self.show_esc_editor {
@@ -695,10 +793,10 @@ impl App {
                 }
                 Tab::Neo => {
                     if self.neo_hide_task_list {
-                        "j/k: scroll | /: commands | d: details | n: new | i: type | Esc: tasks | q: quit"
+                        "j/k: scroll | /: commands | c: cmds | d: details | n: new | i: type | Esc: tasks | q: quit"
                             .to_string()
                     } else {
-                        "↑↓: tasks | Enter: select | /: commands | n: new | i: type | q: quit".to_string()
+                        "↑↓: tasks | Enter: select | /: commands | c: cmds | n: new | i: type | q: quit".to_string()
                     }
                 }
                 Tab::Platform => {

@@ -65,6 +65,15 @@ Dedicated 2-line area between chat and input:
 - `ApprovalRequest` - Requires user approval
 - `TaskNameChange` - Task renamed
 
+### Slash Commands Management Dialog
+
+`render_slash_commands_dialog()` renders the CRUD dialog for custom commands:
+- **List view**: Shows all commands with icons (🔒 builtin, ✏️ custom)
+- **Detail view**: Scrollable view of command prompt and metadata
+- **Create view**: Form with name, description, prompt fields
+- **Edit view**: Form with description, prompt fields (name read-only)
+- **Delete confirm**: Yes/No confirmation dialog
+
 ## Ratatui LLM Chat Best Practices
 
 1. **Use tui-scrollview**: `Paragraph::scroll()` doesn't handle wrapped lines

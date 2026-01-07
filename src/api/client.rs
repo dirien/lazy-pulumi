@@ -24,6 +24,9 @@ pub enum ApiError {
     #[error("API error: {status} - {message}")]
     ApiResponse { status: u16, message: String },
 
+    #[error("Conflict: command was modified elsewhere. Please refresh and try again.")]
+    Conflict,
+
     #[error("Parse error: {0}")]
     Parse(String),
 }
@@ -931,6 +934,153 @@ impl PulumiClient {
             response.commands.len()
         );
         Ok(response.commands)
+    }
+
+    /// Get a single slash command by name
+    /// Fetches all commands and finds the one with the matching name
+    pub async fn get_neo_slash_command(
+        &self,
+        org: &str,
+        command_name: &str,
+    ) -> Result<NeoSlashCommand, ApiError> {
+        // Fetch all commands and find the one we need
+        let all_commands = self.get_neo_slash_commands(org).await?;
+        all_commands
+            .into_iter()
+            .find(|c| c.name == command_name)
+            .ok_or_else(|| {
+                ApiError::ApiResponse {
+                    status: 404,
+                    message: format!("Command '{}' not found", command_name),
+                }
+            })
+    }
+
+    /// Create a new custom slash command
+    pub async fn create_neo_slash_command(
+        &self,
+        org: &str,
+        name: &str,
+        prompt: &str,
+        description: &str,
+    ) -> Result<NeoSlashCommand, ApiError> {
+        let url = format!(
+            "{}/api/console/agents/{}/commands",
+            self.config.base_url, org
+        );
+
+        let body = serde_json::json!({
+            "name": name,
+            "prompt": prompt,
+            "description": description
+        });
+
+        log::debug!("POST Neo slash command: {}", url);
+        let response = self.client.post(&url).json(&body).send().await?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let message = response.text().await.unwrap_or_else(|e| {
+                log::warn!("Failed to read error response body: {}", e);
+                String::new()
+            });
+            log::error!("Neo create slash command error: {} - {}", status, message);
+            return Err(ApiError::ApiResponse { status, message });
+        }
+
+        log::info!("Neo slash command '{}' created successfully", name);
+
+        // API may return empty body on success, so fetch the created command
+        self.get_neo_slash_command(org, name).await
+    }
+
+    /// Delete a custom slash command
+    /// The `tag` parameter is required for optimistic concurrency control (If-Match header)
+    pub async fn delete_neo_slash_command(
+        &self,
+        org: &str,
+        command_name: &str,
+        tag: &str,
+    ) -> Result<(), ApiError> {
+        let url = format!(
+            "{}/api/console/agents/{}/commands/{}",
+            self.config.base_url, org, command_name
+        );
+
+        log::debug!("DELETE Neo slash command: {} (tag: {})", url, tag);
+        let response = self
+            .client
+            .delete(&url)
+            .header("If-Match", tag)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let message = response.text().await.unwrap_or_else(|e| {
+                log::warn!("Failed to read error response body: {}", e);
+                String::new()
+            });
+            log::error!("Neo delete slash command error: {} - {}", status, message);
+            // Return specific Conflict error for 409 status
+            if status == 409 {
+                return Err(ApiError::Conflict);
+            }
+            return Err(ApiError::ApiResponse { status, message });
+        }
+
+        log::info!("Neo slash command '{}' deleted successfully", command_name);
+        Ok(())
+    }
+
+    /// Update an existing custom slash command
+    /// The `tag` parameter is required for optimistic concurrency control (If-Match header)
+    /// Note: The API returns 204 No Content on success, so we fetch the updated command afterward
+    pub async fn update_neo_slash_command(
+        &self,
+        org: &str,
+        command_name: &str,
+        prompt: &str,
+        description: &str,
+        tag: &str,
+    ) -> Result<NeoSlashCommand, ApiError> {
+        let url = format!(
+            "{}/api/console/agents/{}/commands/{}",
+            self.config.base_url, org, command_name
+        );
+
+        let body = serde_json::json!({
+            "prompt": prompt,
+            "description": description
+        });
+
+        log::debug!("PATCH Neo slash command: {} (tag: {})", url, tag);
+        let response = self
+            .client
+            .patch(&url)
+            .header("If-Match", tag)
+            .json(&body)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let message = response.text().await.unwrap_or_else(|e| {
+                log::warn!("Failed to read error response body: {}", e);
+                String::new()
+            });
+            log::error!("Neo update slash command error: {} - {}", status, message);
+            // Return specific Conflict error for 409 status
+            if status == 409 {
+                return Err(ApiError::Conflict);
+            }
+            return Err(ApiError::ApiResponse { status, message });
+        }
+
+        log::info!("Neo slash command '{}' updated successfully", command_name);
+
+        // API returns 204 No Content on success, so fetch the updated command
+        self.get_neo_slash_command(org, command_name).await
     }
 
     /// Create a new Neo task with multiple slash commands embedded in the message

@@ -64,6 +64,7 @@ struct AppState { stacks, environments, neo_tasks, resources, ... }
 |-----|--------|
 | `i` | Enter input mode |
 | `/` | Open slash command picker |
+| `c` | Open slash commands management dialog |
 | `n` | New task |
 | `d` | Task details dialog |
 | `j/k` | Scroll 3 lines |
@@ -101,6 +102,44 @@ Slash commands allow users to invoke predefined Neo prompts.
 | `Esc` | Cancel picker |
 
 Note: Commands are inserted (not immediately executed) so users can add text or multiple commands before sending.
+
+## Slash Commands Management Dialog
+
+Press `c` in Neo tab to open the management dialog. Supports CRUD operations for custom slash commands.
+
+### Dialog Views (`SlashCommandsDialogView`)
+- `List` - Browse all commands (builtin and custom)
+- `Detail` - View command details with scrollable prompt
+- `Create` - Create new custom command form
+- `Edit` - Edit existing custom command form
+- `ConfirmDelete` - Delete confirmation
+
+### Dialog Key Bindings
+| View | Key | Action |
+|------|-----|--------|
+| List | `↑/↓` | Navigate commands |
+| List | `Enter` | View detail |
+| List | `n` | Create new command |
+| List | `e` | Edit selected (custom only) |
+| List | `d` | Delete selected (custom only) |
+| List | `Esc` | Close dialog |
+| Detail | `j/k` | Scroll content |
+| Detail | `e` | Edit command |
+| Detail | `Esc` | Back to list |
+| Create/Edit | `Tab` | Next field |
+| Create/Edit | `Shift+Tab` | Previous field |
+| Create/Edit | `Ctrl+S` | Save |
+| Create/Edit | `Esc` | Cancel |
+
+### State Variables
+| Variable | Type | Purpose |
+|----------|------|---------|
+| `show_slash_commands_dialog` | bool | Dialog visibility |
+| `slash_commands_dialog_view` | SlashCommandsDialogView | Current view |
+| `slash_commands_list` | StatefulList | Commands list |
+| `slash_command_detail` | Option<NeoSlashCommand> | Selected command |
+| `slash_cmd_create_*` | TextInput/TextEditor | Create form fields |
+| `slash_cmd_edit_*` | TextInput/TextEditor | Edit form fields |
 
 ## Data Loading (data.rs)
 

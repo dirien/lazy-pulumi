@@ -9,7 +9,7 @@
 mod client;
 mod types;
 
-pub use client::PulumiClient;
+pub use client::{ApiError, PulumiClient};
 pub use types::{
     EscEnvironmentSummary, NeoMessage, NeoMessageType, NeoSlashCommand, NeoTask, OrgStackUpdate,
     RegistryPackage, RegistryTemplate, Resource, ResourceSummaryPoint, Service, Stack,
