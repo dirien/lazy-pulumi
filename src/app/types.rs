@@ -159,6 +159,22 @@ pub enum PlatformView {
     Templates,
 }
 
+/// Slash commands management dialog view state
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SlashCommandsDialogView {
+    /// Browsing list of commands
+    #[default]
+    List,
+    /// Viewing command details
+    Detail,
+    /// Creating a new command
+    Create,
+    /// Editing an existing command
+    Edit,
+    /// Confirming deletion
+    ConfirmDelete,
+}
+
 impl PlatformView {
     pub fn all() -> &'static [PlatformView] {
         &[

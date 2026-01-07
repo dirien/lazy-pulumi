@@ -21,7 +21,10 @@ pub use esc::{extract_values, json_to_yaml, render_esc_editor, render_esc_view, 
 pub use header::render_header;
 pub use help::render_help;
 pub use logs::render_logs;
-pub use neo::{render_neo_details_dialog, render_neo_view, CommandPickerProps, NeoViewProps};
+pub use neo::{
+    render_neo_details_dialog, render_neo_view, render_slash_commands_dialog, CommandPickerProps,
+    NeoViewProps, SlashCommandsDialogProps,
+};
 pub use platform::{render_platform_view, PlatformViewProps};
 pub use splash::render_splash;
 pub use stacks::render_stacks_view;

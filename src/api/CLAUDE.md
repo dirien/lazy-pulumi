@@ -36,6 +36,12 @@ Event body types: `user_message`, `assistant_message`, `set_task_name`, `exec_to
 
 ### Neo Slash Commands
 - `GET /api/console/agents/{org}/commands` - List available slash commands
+- `POST /api/console/agents/{org}/commands` - Create custom slash command
+- `PATCH /api/console/agents/{org}/commands/{name}` - Update custom slash command (requires `If-Match` header)
+- `DELETE /api/console/agents/{org}/commands/{name}` - Delete custom slash command (requires `If-Match` header)
+
+**Optimistic Concurrency**: PATCH and DELETE require `If-Match` header with the command's `tag` value.
+Returns 409 Conflict if tag is stale.
 
 **New task** with slash commands (uses `message` wrapper):
 ```json
