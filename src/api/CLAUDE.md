@@ -29,10 +29,26 @@ Field names: uses `created`/`modified` (NOT `createdAt`/`modifiedAt`)
 - `GET /api/preview/agents/{org}/tasks` - List tasks (pageSize, continuationToken)
 - `GET /api/preview/agents/{org}/tasks/{taskId}` - Get task metadata
 - `POST /api/preview/agents/{org}/tasks` - Create task
+- `PATCH /api/preview/agents/{org}/tasks/{taskId}` - Update task settings (e.g., sharing)
 - `GET /api/preview/agents/{org}/tasks/{taskId}/events` - Get events
-- `POST /api/preview/agents/{org}/tasks/{taskId}` - Send message
+- `POST /api/preview/agents/{org}/tasks/{taskId}` - Send user event (message, confirmation, cancel)
 
-Event body types: `user_message`, `assistant_message`, `set_task_name`, `exec_tool_call`, `tool_response`, `user_approval_request`
+**Task Status**: `"running"` or `"idle"`
+
+**Task Sharing**: Tasks can be shared with org members via PATCH endpoint:
+```json
+{ "isShared": true }
+```
+
+**User Event Types** (for POST to task):
+- `user_message` - Send a message to the agent
+- `user_confirmation` - Approve or reject an action: `{ "type": "user_confirmation", "approved": true/false }`
+- `user_cancel` - Cancel/stop the task: `{ "type": "user_cancel" }`
+
+**Console Event Types** (from GET events):
+`user_message`, `assistant_message`, `set_task_name`, `exec_tool_call`, `tool_response`, `user_approval_request`
+
+**Entity Types** in task: `stack`, `repository`, `pull_request`, `policy_issue`
 
 ### Neo Slash Commands
 - `GET /api/console/agents/{org}/commands` - List available slash commands
