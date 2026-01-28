@@ -959,22 +959,18 @@ impl App {
                         let cmd_name = cmd.name.clone();
 
                         // Fetch fresh command to get the latest tag (avoids conflicts)
-                        let fresh_cmd =
-                            match client.get_neo_slash_command(org, &cmd_name).await {
-                                Ok(c) => c,
-                                Err(e) => {
-                                    log::error!(
-                                        "Failed to fetch fresh command before delete: {}",
-                                        e
-                                    );
-                                    self.error = Some(format!("Failed to fetch command: {}", e));
-                                    self.is_loading = false;
-                                    // Back to list
-                                    self.slash_command_detail = None;
-                                    self.slash_commands_dialog_view = SlashCommandsDialogView::List;
-                                    return;
-                                }
-                            };
+                        let fresh_cmd = match client.get_neo_slash_command(org, &cmd_name).await {
+                            Ok(c) => c,
+                            Err(e) => {
+                                log::error!("Failed to fetch fresh command before delete: {}", e);
+                                self.error = Some(format!("Failed to fetch command: {}", e));
+                                self.is_loading = false;
+                                // Back to list
+                                self.slash_command_detail = None;
+                                self.slash_commands_dialog_view = SlashCommandsDialogView::List;
+                                return;
+                            }
+                        };
 
                         let cmd_tag = match fresh_cmd.tag {
                             Some(tag) => tag,

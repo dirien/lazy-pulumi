@@ -264,6 +264,7 @@ pub struct NeoTask {
     pub id: String,
     #[serde(default)]
     pub name: Option<String>,
+    /// Task status: "running" or "idle"
     #[serde(default)]
     pub status: Option<String>,
     #[serde(default)]
@@ -272,9 +273,15 @@ pub struct NeoTask {
     pub updated_at: Option<String>,
     #[serde(default)]
     pub url: Option<String>,
-    /// User who started the task
-    #[serde(default)]
+    /// User who created the task (API returns as "createdBy")
+    #[serde(default, alias = "createdBy")]
     pub started_by: Option<NeoTaskUser>,
+    /// Whether this task is shared with other org members
+    #[serde(default)]
+    pub is_shared: Option<bool>,
+    /// When the task was first shared (null if never shared)
+    #[serde(default)]
+    pub shared_at: Option<String>,
     /// Linked pull requests
     #[serde(default, deserialize_with = "null_to_empty_vec")]
     pub linked_prs: Vec<NeoLinkedPR>,
@@ -315,20 +322,34 @@ pub struct NeoLinkedPR {
 }
 
 /// Entity involved in a Neo task
+/// Supports types: "stack", "repository", "pull_request", "policy_issue"
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NeoEntity {
+    /// Entity type: "stack", "repository", "pull_request", "policy_issue"
     #[serde(rename = "type")]
     #[serde(default)]
     pub entity_type: Option<String>,
+    /// Entity name (used by stack, repository)
     #[serde(default)]
     pub name: Option<String>,
+    /// Project name (used by stack)
     #[serde(default)]
     pub project: Option<String>,
+    /// Stack name (used by stack)
     #[serde(default)]
     pub stack: Option<String>,
     #[serde(default)]
     pub url: Option<String>,
+    /// Organization name (used by repository)
+    #[serde(default)]
+    pub org: Option<String>,
+    /// Git forge type (used by repository, e.g., "github", "gitlab")
+    #[serde(default)]
+    pub forge: Option<String>,
+    /// Policy issue ID (used by policy_issue)
+    #[serde(default)]
+    pub id: Option<String>,
 }
 
 /// Policy associated with a Neo task
@@ -387,6 +408,16 @@ pub struct NeoMessage {
 #[serde(rename_all = "camelCase")]
 pub struct NeoCreateTaskResponse {
     pub task_id: String,
+}
+
+/// Neo Update Task request (for PATCH endpoint)
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
+pub struct NeoUpdateTaskRequest {
+    /// Whether to share the task with other org members
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_shared: Option<bool>,
 }
 
 /// Neo Task response (internal struct, not from JSON)

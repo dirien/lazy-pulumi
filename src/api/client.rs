@@ -3,9 +3,9 @@
 use super::types::{
     ApiConfig, EscEnvironmentDetails, EscEnvironmentSummary, EscOpenResponse, NeoCreateTaskMessage,
     NeoCreateTaskResponse, NeoMessage, NeoMessageType, NeoSlashCommand, NeoSlashCommandPayload,
-    NeoTask, NeoTaskResponse, NeoToolCall, RegistryPackage, RegistryPackagesResponse,
-    RegistryTemplate, RegistryTemplatesResponse, Resource, Service, ServicesResponse, Stack,
-    StackUpdate, StacksResponse, User,
+    NeoTask, NeoTaskResponse, NeoToolCall, NeoUpdateTaskRequest, RegistryPackage,
+    RegistryPackagesResponse, RegistryTemplate, RegistryTemplatesResponse, Resource, Service,
+    ServicesResponse, Stack, StackUpdate, StacksResponse, User,
 };
 use color_eyre::Result;
 use reqwest::{header, Client};
@@ -723,6 +723,43 @@ impl PulumiClient {
         })
     }
 
+    /// Update a Neo task's settings (e.g., sharing)
+    /// Only the task owner can change settings
+    #[allow(dead_code)]
+    pub async fn update_neo_task(
+        &self,
+        org: &str,
+        task_id: &str,
+        request: &NeoUpdateTaskRequest,
+    ) -> Result<NeoTask, ApiError> {
+        let url = format!(
+            "{}/api/preview/agents/{}/tasks/{}",
+            self.config.base_url, org, task_id
+        );
+
+        log::debug!("PATCH Neo task: {}", url);
+        let response = self.client.patch(&url).json(request).send().await?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let message = response.text().await.unwrap_or_default();
+            log::error!("Neo update task error: {} - {}", status, message);
+            return Err(ApiError::ApiResponse { status, message });
+        }
+
+        let text = response.text().await?;
+        log::debug!("Neo update task response: {}", &text[..text.len().min(500)]);
+
+        serde_json::from_str::<NeoTask>(&text).map_err(|e| {
+            log::error!(
+                "Failed to parse Neo task update response: {}. Response: {}",
+                e,
+                &text[..text.len().min(1000)]
+            );
+            ApiError::Parse(format!("Failed to parse task update response: {}", e))
+        })
+    }
+
     /// Create a new Neo task
     pub async fn create_neo_task(
         &self,
@@ -795,6 +832,93 @@ impl PulumiClient {
         }
 
         // Response is 202 Accepted with no body, so return with the task_id
+        Ok(NeoTaskResponse {
+            task_id: task_id.to_string(),
+            status: None,
+            messages: vec![],
+            has_more: false,
+            requires_approval: false,
+        })
+    }
+
+    /// Send a user confirmation event to approve an action
+    /// Used when the agent requests approval for a tool execution
+    #[allow(dead_code)]
+    pub async fn confirm_neo_task(
+        &self,
+        org: &str,
+        task_id: &str,
+        approved: bool,
+    ) -> Result<NeoTaskResponse, ApiError> {
+        let url = format!(
+            "{}/api/preview/agents/{}/tasks/{}",
+            self.config.base_url, org, task_id
+        );
+
+        let timestamp = chrono::Utc::now().to_rfc3339();
+        let body = serde_json::json!({
+            "event": {
+                "type": "user_confirmation",
+                "approved": approved,
+                "timestamp": timestamp
+            }
+        });
+
+        log::debug!(
+            "POST Neo task confirmation: {} (approved: {})",
+            url,
+            approved
+        );
+        let response = self.client.post(&url).json(&body).send().await?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let message = response.text().await.unwrap_or_default();
+            log::error!("Neo task confirmation error: {} - {}", status, message);
+            return Err(ApiError::ApiResponse { status, message });
+        }
+
+        // Response is 202 Accepted with no body
+        Ok(NeoTaskResponse {
+            task_id: task_id.to_string(),
+            status: None,
+            messages: vec![],
+            has_more: false,
+            requires_approval: false,
+        })
+    }
+
+    /// Send a user cancel event to cancel/stop a task
+    #[allow(dead_code)]
+    pub async fn cancel_neo_task(
+        &self,
+        org: &str,
+        task_id: &str,
+    ) -> Result<NeoTaskResponse, ApiError> {
+        let url = format!(
+            "{}/api/preview/agents/{}/tasks/{}",
+            self.config.base_url, org, task_id
+        );
+
+        let timestamp = chrono::Utc::now().to_rfc3339();
+        let body = serde_json::json!({
+            "event": {
+                "type": "user_cancel",
+                "timestamp": timestamp
+            }
+        });
+
+        log::debug!("POST Neo task cancel: {}", url);
+        let response = self.client.post(&url).json(&body).send().await?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let message = response.text().await.unwrap_or_default();
+            log::error!("Neo task cancel error: {} - {}", status, message);
+            return Err(ApiError::ApiResponse { status, message });
+        }
+
+        // Response is 202 Accepted with no body
         Ok(NeoTaskResponse {
             task_id: task_id.to_string(),
             status: None,
@@ -948,11 +1072,9 @@ impl PulumiClient {
         all_commands
             .into_iter()
             .find(|c| c.name == command_name)
-            .ok_or_else(|| {
-                ApiError::ApiResponse {
-                    status: 404,
-                    message: format!("Command '{}' not found", command_name),
-                }
+            .ok_or_else(|| ApiError::ApiResponse {
+                status: 404,
+                message: format!("Command '{}' not found", command_name),
             })
     }
 

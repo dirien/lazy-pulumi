@@ -43,6 +43,8 @@ impl App {
                             updated_at: None,
                             url: None,
                             started_by: None,
+                            is_shared: Some(false),
+                            shared_at: None,
                             linked_prs: Vec::new(),
                             entities: Vec::new(),
                             policies: Vec::new(),
