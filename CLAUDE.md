@@ -10,6 +10,7 @@ cargo build --release    # Release build
 cargo run --release      # Run (release recommended)
 cargo check              # Check for errors
 RUST_LOG=debug cargo run --release  # With debug logging
+cargo xtask update-spec  # Download latest Pulumi OpenAPI spec
 ```
 
 ## Environment Variables
@@ -30,6 +31,7 @@ This documentation is distributed across multiple CLAUDE.md files for context ef
 |----------|---------|
 | `src/CLAUDE.md` | Architecture overview, TEA pattern, app flow |
 | `src/api/CLAUDE.md` | API endpoints, pagination, request/response types |
+| `src/api/ADDING_ENDPOINTS.md` | Step-by-step guide for adding new API endpoints |
 | `src/app/CLAUDE.md` | App core, handlers, Neo chat state, polling |
 | `src/components/CLAUDE.md` | Reusable widgets (StatefulList, TextInput, TextEditor) |
 | `src/ui/CLAUDE.md` | View rendering, dashboard, Neo chat, markdown |
@@ -39,6 +41,10 @@ Read the relevant CLAUDE.md when working in that directory.
 ## Project Structure
 
 ```
+openapi/
+└── pulumi-spec.json  # Pulumi Cloud OpenAPI spec (update via `cargo xtask update-spec`)
+xtask/                # Developer tooling (cargo xtask)
+└── src/main.rs       # update-spec command
 src/
 ├── CLAUDE.md       # Architecture overview
 ├── app/            # Application core (TEA pattern)
