@@ -7,10 +7,12 @@
 //! - Pulumi Platform (services, components, templates)
 
 mod client;
-mod types;
+mod convert;
+mod domain;
+mod generated;
 
 pub use client::{ApiError, PulumiClient};
-pub use types::{
+pub use domain::{
     EscEnvironmentSummary, NeoMessage, NeoMessageType, NeoSlashCommand, NeoTask, OrgStackUpdate,
     RegistryPackage, RegistryTemplate, Resource, ResourceSummaryPoint, Service, Stack,
 };

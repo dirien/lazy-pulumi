@@ -183,10 +183,12 @@ src/
 ├── config.rs        # User configuration (splash screen preference)
 ├── startup.rs       # Startup validation checks
 ├── logging.rs       # File-based logging system
-├── api/             # Pulumi API client
+├── api/             # Pulumi API client (progenitor-generated + hand-written)
 │   ├── mod.rs
-│   ├── client.rs    # HTTP client
-│   └── types.rs     # Data structures (Stacks, ESC, Neo, Resources, Registry)
+│   ├── client.rs    # HTTP client (thin wrappers over generated client)
+│   ├── domain.rs    # App-level types (Stacks, ESC, Neo, Resources, Registry)
+│   ├── convert.rs   # From<generated::Type> → domain type conversions
+│   └── generated.rs # include!() wrapper for progenitor output
 ├── components/      # Reusable UI components
 │   ├── mod.rs
 │   ├── input.rs     # Text input field
@@ -252,6 +254,18 @@ On startup, the application displays a splash screen with:
   - PULUMI_ACCESS_TOKEN validation
   - Pulumi CLI availability check
 - Option to skip splash screen on future launches
+
+## Development
+
+The project is a Cargo workspace with the main crate and an `xtask` helper:
+
+```bash
+# Update the Pulumi OpenAPI spec to the latest version
+cargo xtask update-spec
+
+# Run quality checks
+cargo test && cargo clippy -- -D warnings && cargo fmt --check
+```
 
 ## License
 

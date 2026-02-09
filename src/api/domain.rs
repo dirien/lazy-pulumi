@@ -1,4 +1,8 @@
-//! Common types for the Pulumi API
+//! Domain types for the Pulumi API
+//!
+//! These are the application-level types used throughout the app.
+//! Response wrapper structs (e.g. StacksResponse) are handled by the
+//! generated client — see `generated.rs`.
 
 use chrono::DateTime;
 use serde::{Deserialize, Serialize};
@@ -58,14 +62,6 @@ impl Stack {
             None => "Never".to_string(),
         }
     }
-}
-
-/// Stack list response
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StacksResponse {
-    pub stacks: Vec<Stack>,
-    #[serde(default)]
-    pub continuation_token: Option<String>,
 }
 
 /// Stack update info
@@ -184,18 +180,6 @@ impl EscEnvironment {
     pub fn full_name(&self) -> String {
         format!("{}/{}/{}", self.organization, self.project, self.name)
     }
-}
-
-/// ESC Environment list response
-#[allow(dead_code)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EscEnvironmentsResponse {
-    #[serde(default)]
-    pub environments: Vec<EscEnvironmentSummary>,
-    /// Continuation token for pagination (API may use either field name)
-    #[serde(default, alias = "nextToken")]
-    pub continuation_token: Option<String>,
 }
 
 /// ESC Environment summary from list
@@ -406,6 +390,7 @@ pub struct NeoMessage {
 /// Neo Create Task API response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub struct NeoCreateTaskResponse {
     pub task_id: String,
 }
@@ -429,13 +414,6 @@ pub struct NeoTaskResponse {
     pub messages: Vec<NeoMessage>,
     pub has_more: bool,
     pub requires_approval: bool,
-}
-
-/// Neo Tasks list response
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)]
-pub struct NeoTasksResponse {
-    pub tasks: Vec<NeoTask>,
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -495,16 +473,6 @@ pub struct NeoSlashCommandPayload {
     pub built_in: bool,
     pub modified_at: String,
     pub tag: String,
-}
-
-/// Resource search result
-#[allow(dead_code)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ResourceSearchResult {
-    #[serde(default)]
-    pub total: Option<i64>,
-    pub resources: Vec<Resource>,
 }
 
 /// Pulumi Resource
@@ -614,15 +582,6 @@ impl Service {
     }
 }
 
-/// Services list response
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServicesResponse {
-    #[serde(default)]
-    pub services: Vec<Service>,
-    #[serde(default)]
-    pub continuation_token: Option<String>,
-}
-
 /// Registry Package/Component
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -672,15 +631,6 @@ impl RegistryPackage {
     }
 }
 
-/// Registry packages list response
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RegistryPackagesResponse {
-    #[serde(default)]
-    pub packages: Vec<RegistryPackage>,
-    #[serde(default)]
-    pub continuation_token: Option<String>,
-}
-
 /// Template runtime configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TemplateRuntime {
@@ -726,15 +676,6 @@ impl RegistryTemplate {
     }
 }
 
-/// Registry templates list response
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RegistryTemplatesResponse {
-    #[serde(default)]
-    pub templates: Vec<RegistryTemplate>,
-    #[serde(default)]
-    pub continuation_token: Option<String>,
-}
-
 // ─────────────────────────────────────────────────────────────
 // Resource Summary Types (for resource count over time chart)
 // ─────────────────────────────────────────────────────────────
@@ -772,10 +713,4 @@ impl ResourceSummaryPoint {
         };
         format!("{} {}", month_name, self.day)
     }
-}
-
-/// Resource summary API response
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResourceSummaryResponse {
-    pub summary: Vec<ResourceSummaryPoint>,
 }

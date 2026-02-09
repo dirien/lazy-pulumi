@@ -1,14 +1,19 @@
 # src/api/ - Pulumi Cloud API Client
 
-Async HTTP client for Pulumi Cloud REST API using reqwest.
+Async HTTP client for Pulumi Cloud REST API using reqwest + progenitor-generated code.
 
-**Related docs**: `../CLAUDE.md` (architecture), `../app/CLAUDE.md` (data loading), `../../CLAUDE.md` (env vars)
+**Related docs**: `../CLAUDE.md` (architecture), `../app/CLAUDE.md` (data loading), `../../CLAUDE.md` (env vars), **[`ADDING_ENDPOINTS.md`](ADDING_ENDPOINTS.md)** (how to add new API endpoints)
 
 ## Files
 
-- `client.rs` - HTTP client implementation with bearer token auth
-- `types.rs` - API response/request types (serde)
-- `mod.rs` - Re-exports
+| File | Purpose |
+|------|---------|
+| `client.rs` | `PulumiClient` — thin wrappers over generated client or raw reqwest |
+| `domain.rs` | App-level types (used by UI, handlers, state) |
+| `convert.rs` | `From<generated::Type>` impls mapping generated → domain types |
+| `generated.rs` | `include!()` wrapper for progenitor output (do not edit) |
+| `mod.rs` | Public re-exports |
+| `ADDING_ENDPOINTS.md` | Step-by-step guide for adding new API endpoints |
 
 ## API Endpoints
 
