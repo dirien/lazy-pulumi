@@ -23,7 +23,7 @@ tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.13", features = ["json", "rustls", "stream"], default-features = false }
 
 # Generated API client
-progenitor-client = "0.12"
+progenitor-client = "0.13"
 
 # Serialization
 serde = { version = "1", features = ["derive"] }

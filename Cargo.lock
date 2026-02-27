@@ -74,9 +74,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.100"
+version = "1.0.102"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
+checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
 name = "arbitrary"
@@ -369,9 +369,9 @@ checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
 name = "chrono"
-version = "0.4.42"
+version = "0.4.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "145052bdd345b87320e369255277e3fb5152762ad123a901ef5c262dd38fe8d2"
+checksum = "c673075a2e0e5f4a1dde27ce9dee1ea4558c7ffe648f576438a20ca1d2acc4b0"
 dependencies = [
  "iana-time-zone",
  "js-sys",
@@ -1562,7 +1562,7 @@ dependencies = [
  "portable-pty",
  "prettyplease",
  "progenitor",
- "progenitor-client 0.12.0",
+ "progenitor-client",
  "ratatui",
  "reqwest 0.13.2",
  "serde",
@@ -2257,24 +2257,9 @@ version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d36315275b213c64c68dff684477ea7118a0f630832f737b550796a368f9962c"
 dependencies = [
- "progenitor-client 0.13.0",
+ "progenitor-client",
  "progenitor-impl",
  "progenitor-macro",
-]
-
-[[package]]
-name = "progenitor-client"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ffab7b358944dba033a7b324e7558e66e6bcb1fb4705cf57f26fd5092bcae630"
-dependencies = [
- "bytes",
- "futures-core",
- "percent-encoding",
- "reqwest 0.13.2",
- "serde",
- "serde_json",
- "serde_urlencoded",
 ]
 
 [[package]]
