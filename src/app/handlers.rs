@@ -1205,42 +1205,55 @@ impl App {
 
     /// Handle Platform view keys
     async fn handle_platform_key(&mut self, key: KeyEvent) {
-        // For Components/Templates views: j/k scroll description, arrow keys navigate list
+        // For PrivateComponents/Registry/Templates views: j/k scroll description, arrow keys navigate list
         // For Services view: both j/k and arrow keys navigate list
         match key.code {
-            // j/k keys - scroll description in Components/Templates, navigate list in Services
+            // j/k keys - scroll description in package/template views, navigate list in Services
             KeyCode::Char('j') => match self.platform_view {
                 PlatformView::Services => self.services_list.next(),
-                PlatformView::Components | PlatformView::Templates => {
+                PlatformView::PrivateComponents
+                | PlatformView::Registry
+                | PlatformView::Templates => {
                     self.platform_desc_scroll_state.scroll_down();
                 }
             },
             KeyCode::Char('k') => match self.platform_view {
                 PlatformView::Services => self.services_list.previous(),
-                PlatformView::Components | PlatformView::Templates => {
+                PlatformView::PrivateComponents
+                | PlatformView::Registry
+                | PlatformView::Templates => {
                     self.platform_desc_scroll_state.scroll_up();
                 }
             },
             // J/K for page scroll in description
             KeyCode::Char('J') => match self.platform_view {
                 PlatformView::Services => {}
-                PlatformView::Components | PlatformView::Templates => {
+                PlatformView::PrivateComponents
+                | PlatformView::Registry
+                | PlatformView::Templates => {
                     self.platform_desc_scroll_state.scroll_page_down();
                 }
             },
             KeyCode::Char('K') => match self.platform_view {
                 PlatformView::Services => {}
-                PlatformView::Components | PlatformView::Templates => {
+                PlatformView::PrivateComponents
+                | PlatformView::Registry
+                | PlatformView::Templates => {
                     self.platform_desc_scroll_state.scroll_page_up();
                 }
             },
             // Arrow keys - always navigate the list
             KeyCode::Up => match self.platform_view {
                 PlatformView::Services => self.services_list.previous(),
-                PlatformView::Components => {
+                PlatformView::PrivateComponents => {
+                    self.private_packages_list.previous();
+                    self.platform_desc_scroll_state = ScrollViewState::default();
+                    self.schedule_readme_load();
+                }
+                PlatformView::Registry => {
                     self.packages_list.previous();
                     self.platform_desc_scroll_state = ScrollViewState::default();
-                    self.spawn_readme_load_for_selected_package();
+                    self.schedule_readme_load();
                 }
                 PlatformView::Templates => {
                     self.templates_list.previous();
@@ -1249,10 +1262,15 @@ impl App {
             },
             KeyCode::Down => match self.platform_view {
                 PlatformView::Services => self.services_list.next(),
-                PlatformView::Components => {
+                PlatformView::PrivateComponents => {
+                    self.private_packages_list.next();
+                    self.platform_desc_scroll_state = ScrollViewState::default();
+                    self.schedule_readme_load();
+                }
+                PlatformView::Registry => {
                     self.packages_list.next();
                     self.platform_desc_scroll_state = ScrollViewState::default();
-                    self.spawn_readme_load_for_selected_package();
+                    self.schedule_readme_load();
                 }
                 PlatformView::Templates => {
                     self.templates_list.next();
@@ -1263,37 +1281,42 @@ impl App {
             KeyCode::Left | KeyCode::Char('h') => {
                 self.platform_view = self.platform_view.previous();
                 self.platform_desc_scroll_state = ScrollViewState::default();
-                if self.platform_view == PlatformView::Components {
-                    self.spawn_readme_load_for_selected_package();
-                }
+                self.schedule_readme_load();
             }
             KeyCode::Right | KeyCode::Char('l') => {
                 self.platform_view = self.platform_view.next();
                 self.platform_desc_scroll_state = ScrollViewState::default();
-                if self.platform_view == PlatformView::Components {
-                    self.spawn_readme_load_for_selected_package();
-                }
+                self.schedule_readme_load();
             }
             // PageUp/PageDown - page scroll description
             KeyCode::PageUp => match self.platform_view {
                 PlatformView::Services => {}
-                PlatformView::Components | PlatformView::Templates => {
+                PlatformView::PrivateComponents
+                | PlatformView::Registry
+                | PlatformView::Templates => {
                     self.platform_desc_scroll_state.scroll_page_up();
                 }
             },
             KeyCode::PageDown => match self.platform_view {
                 PlatformView::Services => {}
-                PlatformView::Components | PlatformView::Templates => {
+                PlatformView::PrivateComponents
+                | PlatformView::Registry
+                | PlatformView::Templates => {
                     self.platform_desc_scroll_state.scroll_page_down();
                 }
             },
             // Home/g - go to first item
             KeyCode::Home | KeyCode::Char('g') => match self.platform_view {
                 PlatformView::Services => self.services_list.select_first(),
-                PlatformView::Components => {
+                PlatformView::PrivateComponents => {
+                    self.private_packages_list.select_first();
+                    self.platform_desc_scroll_state = ScrollViewState::default();
+                    self.schedule_readme_load();
+                }
+                PlatformView::Registry => {
                     self.packages_list.select_first();
                     self.platform_desc_scroll_state = ScrollViewState::default();
-                    self.spawn_readme_load_for_selected_package();
+                    self.schedule_readme_load();
                 }
                 PlatformView::Templates => {
                     self.templates_list.select_first();
@@ -1303,10 +1326,15 @@ impl App {
             // End/G - go to last item
             KeyCode::End | KeyCode::Char('G') => match self.platform_view {
                 PlatformView::Services => self.services_list.select_last(),
-                PlatformView::Components => {
+                PlatformView::PrivateComponents => {
+                    self.private_packages_list.select_last();
+                    self.platform_desc_scroll_state = ScrollViewState::default();
+                    self.schedule_readme_load();
+                }
+                PlatformView::Registry => {
                     self.packages_list.select_last();
                     self.platform_desc_scroll_state = ScrollViewState::default();
-                    self.spawn_readme_load_for_selected_package();
+                    self.schedule_readme_load();
                 }
                 PlatformView::Templates => {
                     self.templates_list.select_last();
@@ -1319,16 +1347,27 @@ impl App {
                 self.platform_desc_scroll_state = ScrollViewState::default();
             }
             KeyCode::Char('2') => {
-                self.platform_view = PlatformView::Components;
+                self.platform_view = PlatformView::PrivateComponents;
+                self.platform_desc_scroll_state = ScrollViewState::default();
+                self.spawn_readme_load_for_selected_private_package();
+            }
+            KeyCode::Char('3') => {
+                self.platform_view = PlatformView::Registry;
                 self.platform_desc_scroll_state = ScrollViewState::default();
                 self.spawn_readme_load_for_selected_package();
             }
-            KeyCode::Char('3') => {
+            KeyCode::Char('4') => {
                 self.platform_view = PlatformView::Templates;
                 self.platform_desc_scroll_state = ScrollViewState::default();
             }
             _ => {}
         }
+    }
+
+    /// Schedule a debounced README load (200ms after last navigation)
+    fn schedule_readme_load(&mut self) {
+        self.readme_debounce_deadline =
+            Some(tokio::time::Instant::now() + std::time::Duration::from_millis(200));
     }
 
     /// Spawn startup checks as background tasks (non-blocking)

@@ -1539,21 +1539,21 @@ impl PulumiClient {
         Ok(data.services.into_iter().map(Into::into).collect())
     }
 
-    /// List registry packages (components)
+    /// List registry packages (components), optionally filtered by visibility
     pub async fn list_registry_packages(
         &self,
         org: Option<&str>,
+        visibility: Option<&str>,
     ) -> Result<Vec<RegistryPackage>, ApiError> {
         let org = self.org_or_default(org)?;
 
-        let resp = self
-            .gen
-            .list_packages_preview()
-            .org_login(org)
-            .limit(50)
-            .send()
-            .await
-            .map_err(map_gen_err)?;
+        let mut builder = self.gen.list_packages_preview().org_login(org).limit(50);
+
+        if let Some(vis) = visibility {
+            builder = builder.visibility(vis);
+        }
+
+        let resp = builder.send().await.map_err(map_gen_err)?;
 
         let data = resp.into_inner();
         Ok(data.packages.into_iter().map(Into::into).collect())
@@ -1616,7 +1616,10 @@ impl PulumiClient {
             return Err(ApiError::ApiResponse { status, message });
         }
 
-        response.text().await.map_err(ApiError::Http)
+        let text = response.text().await.map_err(ApiError::Http)?;
+
+        // Strip YAML frontmatter (---...---) that many provider READMEs include
+        Ok(strip_frontmatter(&text))
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -1644,6 +1647,26 @@ impl PulumiClient {
 
         let data = resp.into_inner();
         Ok(data.summary.into_iter().map(Into::into).collect())
+    }
+}
+
+/// Strip YAML frontmatter from markdown content.
+///
+/// Many provider READMEs start with a `---` delimited YAML block that
+/// should not be rendered as visible text.
+fn strip_frontmatter(text: &str) -> String {
+    let trimmed = text.trim_start();
+    if !trimmed.starts_with("---") {
+        return text.to_string();
+    }
+    // Find the closing `---` after the opening one
+    if let Some(end) = trimmed[3..].find("\n---") {
+        // Skip past the closing `---` and the newline after it
+        let rest = &trimmed[3 + end + 4..];
+        rest.trim_start_matches('\n').to_string()
+    } else {
+        // No closing delimiter — return as-is
+        text.to_string()
     }
 }
 
@@ -1975,5 +1998,32 @@ mod tests {
             }
             Err(e) => panic!("unexpected error listing organizations: {:?}", e),
         }
+    }
+
+    // ═════════════════════════════════════════════════════════════
+    // strip_frontmatter tests
+    // ═════════════════════════════════════════════════════════════
+
+    #[test]
+    fn strip_frontmatter_removes_yaml_block() {
+        let input = "---\ntitle: Foo\nversion: 1.0\n---\n# Hello\nWorld";
+        assert_eq!(strip_frontmatter(input), "# Hello\nWorld");
+    }
+
+    #[test]
+    fn strip_frontmatter_no_frontmatter_unchanged() {
+        let input = "# Hello\nWorld";
+        assert_eq!(strip_frontmatter(input), input);
+    }
+
+    #[test]
+    fn strip_frontmatter_unclosed_unchanged() {
+        let input = "---\ntitle: Foo\n# Hello";
+        assert_eq!(strip_frontmatter(input), input);
+    }
+
+    #[test]
+    fn strip_frontmatter_empty_string() {
+        assert_eq!(strip_frontmatter(""), "");
     }
 }

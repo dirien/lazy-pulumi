@@ -664,9 +664,25 @@ pub struct RegistryTemplate {
 
 impl RegistryTemplate {
     pub fn display(&self) -> String {
-        self.display_name
-            .clone()
-            .unwrap_or_else(|| self.name.clone())
+        // Prefer display_name, then humanized name, then project_name, then raw name
+        if let Some(dn) = &self.display_name {
+            return dn.clone();
+        }
+        let humanized = humanize_template_name(&self.name);
+        if !humanized.is_empty() {
+            return humanized;
+        }
+        if let Some(pn) = &self.project_name {
+            if !pn.is_empty() {
+                return humanize_template_name(pn);
+            }
+        }
+        // Last resort: use source/publisher as context
+        match (&self.source, &self.publisher) {
+            (Some(src), Some(pub_)) => format!("{}/{}", pub_, src),
+            (Some(src), None) => src.clone(),
+            _ => "(unnamed template)".to_string(),
+        }
     }
 
     pub fn full_name(&self) -> String {
@@ -674,6 +690,29 @@ impl RegistryTemplate {
         let publisher = self.publisher.as_deref().unwrap_or("unknown");
         format!("{}/{}/{}", source, publisher, self.name)
     }
+}
+
+/// Turn a raw template name (often a path like
+/// `pulumi/workshops/self-service-ai-application-platforms/template-name`)
+/// into a human-readable title by taking the last path segment and
+/// converting hyphens/underscores to spaces with title case.
+fn humanize_template_name(name: &str) -> String {
+    let segment = name.rsplit('/').next().unwrap_or(name);
+    segment
+        .split(['-', '_'])
+        .filter(|s| !s.is_empty())
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                Some(c) => {
+                    let upper: String = c.to_uppercase().collect();
+                    format!("{}{}", upper, chars.as_str())
+                }
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -712,5 +751,100 @@ impl ResourceSummaryPoint {
             _ => "???",
         };
         format!("{} {}", month_name, self.day)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn humanize_template_name_last_segment() {
+        assert_eq!(
+            humanize_template_name("pulumi/workshops/golden-paths-infrastructure"),
+            "Golden Paths Infrastructure"
+        );
+    }
+
+    #[test]
+    fn humanize_template_name_plain_name() {
+        assert_eq!(humanize_template_name("my-template"), "My Template");
+    }
+
+    #[test]
+    fn humanize_template_name_underscores() {
+        assert_eq!(
+            humanize_template_name("my_cool_template"),
+            "My Cool Template"
+        );
+    }
+
+    #[test]
+    fn humanize_template_name_single_word() {
+        assert_eq!(humanize_template_name("kubernetes"), "Kubernetes");
+    }
+
+    #[test]
+    fn template_display_prefers_display_name() {
+        let tmpl = RegistryTemplate {
+            name: "some/long/path-name".to_string(),
+            display_name: Some("Nice Name".to_string()),
+            publisher: None,
+            source: None,
+            version: None,
+            description: None,
+            language: None,
+            runtime: None,
+            project_name: None,
+        };
+        assert_eq!(tmpl.display(), "Nice Name");
+    }
+
+    #[test]
+    fn template_display_falls_back_to_humanized_name() {
+        let tmpl = RegistryTemplate {
+            name: "pulumi/workshops/self-service-ai-platforms/template-foo".to_string(),
+            display_name: None,
+            publisher: None,
+            source: None,
+            version: None,
+            description: None,
+            language: None,
+            runtime: None,
+            project_name: None,
+        };
+        assert_eq!(tmpl.display(), "Template Foo");
+    }
+
+    #[test]
+    fn template_display_falls_back_to_project_name() {
+        let tmpl = RegistryTemplate {
+            name: String::new(),
+            display_name: None,
+            publisher: Some("ediri".to_string()),
+            source: Some("github/ediri/pulumi/workshops".to_string()),
+            version: None,
+            description: None,
+            language: None,
+            runtime: None,
+            project_name: Some("my-cool-project".to_string()),
+        };
+        assert_eq!(tmpl.display(), "My Cool Project");
+    }
+
+    #[test]
+    fn template_display_falls_back_to_source_publisher() {
+        let tmpl = RegistryTemplate {
+            name: String::new(),
+            display_name: None,
+            publisher: Some("ediri".to_string()),
+            source: Some("github".to_string()),
+            version: None,
+            description: None,
+            language: None,
+            runtime: None,
+            project_name: None,
+        };
+        assert_eq!(tmpl.display(), "ediri/github");
     }
 }

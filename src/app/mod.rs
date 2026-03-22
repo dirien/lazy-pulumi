@@ -126,10 +126,13 @@ pub struct App {
     // Platform UI state
     pub(super) platform_view: PlatformView,
     pub(super) services_list: StatefulList<Service>,
+    pub(super) private_packages_list: StatefulList<RegistryPackage>,
     pub(super) packages_list: StatefulList<RegistryPackage>,
     pub(super) templates_list: StatefulList<RegistryTemplate>,
     /// Scroll state for Component/Template description panel
     pub(super) platform_desc_scroll_state: ScrollViewState,
+    /// Debounce deadline for README loading — load triggers after this instant
+    pub(super) readme_debounce_deadline: Option<tokio::time::Instant>,
 
     /// Neo polling state - tracks if we're waiting for agent response
     pub(super) neo_polling: bool,
@@ -315,9 +318,11 @@ impl App {
             esc_editing_env: None,
             platform_view: PlatformView::Services,
             services_list: StatefulList::new(),
+            private_packages_list: StatefulList::new(),
             packages_list: StatefulList::new(),
             templates_list: StatefulList::new(),
             platform_desc_scroll_state: ScrollViewState::default(),
+            readme_debounce_deadline: None,
             neo_polling: false,
             neo_poll_counter: 0,
             neo_stable_polls: 0,
@@ -414,6 +419,14 @@ impl App {
 
                     // Process command results on every tick for responsive streaming output
                     self.process_command_results();
+
+                    // Debounced README loading — fire after user stops navigating
+                    if let Some(deadline) = self.readme_debounce_deadline {
+                        if tokio::time::Instant::now() >= deadline {
+                            self.readme_debounce_deadline = None;
+                            self.spawn_readme_for_current_platform_view();
+                        }
+                    }
 
                     // Poll for Neo updates if we're waiting for a response (fast polling)
                     if self.neo_polling {
@@ -520,6 +533,7 @@ impl App {
         // Platform state
         let platform_view = self.platform_view;
         let services_list = &mut self.services_list;
+        let private_packages_list = &mut self.private_packages_list;
         let packages_list = &mut self.packages_list;
         let templates_list = &mut self.templates_list;
         let platform_desc_scroll_state = &mut self.platform_desc_scroll_state;
@@ -633,6 +647,7 @@ impl App {
                         ui::PlatformViewProps {
                             current_view: platform_view,
                             services: services_list,
+                            private_packages: private_packages_list,
                             packages: packages_list,
                             templates: templates_list,
                             description_scroll_state: platform_desc_scroll_state,

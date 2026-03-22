@@ -17,6 +17,7 @@ pub enum DataLoadResult {
     NeoSlashCommands(Vec<NeoSlashCommand>),
     Resources(Vec<Resource>),
     Services(Vec<Service>),
+    PrivatePackages(Vec<RegistryPackage>),
     RegistryPackages(Vec<RegistryPackage>),
     RegistryTemplates(Vec<RegistryTemplate>),
     /// Recent stack updates across the organization
@@ -155,7 +156,8 @@ impl EscPane {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlatformView {
     Services,
-    Components,
+    PrivateComponents,
+    Registry,
     Templates,
 }
 
@@ -179,7 +181,8 @@ impl PlatformView {
     pub fn all() -> &'static [PlatformView] {
         &[
             PlatformView::Services,
-            PlatformView::Components,
+            PlatformView::PrivateComponents,
+            PlatformView::Registry,
             PlatformView::Templates,
         ]
     }
@@ -187,7 +190,8 @@ impl PlatformView {
     pub fn title(&self) -> &'static str {
         match self {
             PlatformView::Services => "Services",
-            PlatformView::Components => "Components",
+            PlatformView::PrivateComponents => "Private Components",
+            PlatformView::Registry => "Registry",
             PlatformView::Templates => "Templates",
         }
     }
@@ -195,16 +199,18 @@ impl PlatformView {
     pub fn index(&self) -> usize {
         match self {
             PlatformView::Services => 0,
-            PlatformView::Components => 1,
-            PlatformView::Templates => 2,
+            PlatformView::PrivateComponents => 1,
+            PlatformView::Registry => 2,
+            PlatformView::Templates => 3,
         }
     }
 
     pub fn from_index(index: usize) -> Self {
         match index {
             0 => PlatformView::Services,
-            1 => PlatformView::Components,
-            2 => PlatformView::Templates,
+            1 => PlatformView::PrivateComponents,
+            2 => PlatformView::Registry,
+            3 => PlatformView::Templates,
             _ => PlatformView::Services,
         }
     }
@@ -251,6 +257,7 @@ pub struct AppState {
 
     // Platform data
     pub services: Vec<Service>,
+    pub private_packages: Vec<RegistryPackage>,
     pub registry_packages: Vec<RegistryPackage>,
     pub registry_templates: Vec<RegistryTemplate>,
 

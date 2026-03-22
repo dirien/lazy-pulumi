@@ -62,6 +62,13 @@ Field names: uses `created`/`modified` (NOT `createdAt`/`modifiedAt`)
 **New task** with slash commands uses `message` wrapper with `{{cmd:name:tag}}` content format.
 **Existing task** continuation uses `event` wrapper.
 
+### Registry Packages & Templates
+- `GET /api/preview/registry/packages?orgLogin={org}&visibility={vis}` — List packages
+  - `visibility` filter: `"private"` or `"public"` (omit for all)
+- `GET /api/preview/registry/templates?orgLogin={org}` — List templates
+- README content fetched via signed S3 URLs (requires `gzip` reqwest feature)
+- YAML frontmatter is stripped from README content before display
+
 ### Resource Search
 - `GET /api/orgs/{org}/search/resourcesv2` — Search resources (v2)
 - Pagination: `page` (1-based), `size` params
