@@ -7,6 +7,10 @@
 //! - Pulumi Platform (services, components, templates)
 
 mod client;
+mod client_esc;
+mod client_neo;
+mod client_platform;
+mod client_stacks;
 mod convert;
 mod domain;
 mod generated;

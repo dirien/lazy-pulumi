@@ -131,9 +131,10 @@ pub struct App {
     pub(super) templates_list: StatefulList<RegistryTemplate>,
     /// Scroll state for Component/Template description panel
     pub(super) platform_desc_scroll_state: ScrollViewState,
+    /// Cached markdown description lines (cache key, rendered lines)
+    pub(super) platform_desc_cache: Option<(String, Vec<ratatui::text::Line<'static>>)>,
     /// Debounce deadline for README loading — load triggers after this instant
     pub(super) readme_debounce_deadline: Option<tokio::time::Instant>,
-
     /// Neo polling state - tracks if we're waiting for agent response
     pub(super) neo_polling: bool,
     /// Counter for polling interval (poll every N ticks)
@@ -324,6 +325,7 @@ impl App {
             packages_list: StatefulList::new(),
             templates_list: StatefulList::new(),
             platform_desc_scroll_state: ScrollViewState::default(),
+            platform_desc_cache: None,
             readme_debounce_deadline: None,
             neo_polling: false,
             neo_poll_counter: 0,
@@ -551,6 +553,7 @@ impl App {
         let packages_list = &mut self.packages_list;
         let templates_list = &mut self.templates_list;
         let platform_desc_scroll_state = &mut self.platform_desc_scroll_state;
+        let platform_desc_cache = &mut self.platform_desc_cache;
 
         // Commands state
         let commands_view_state = self.commands_view_state;
@@ -669,6 +672,7 @@ impl App {
                             packages: packages_list,
                             templates: templates_list,
                             description_scroll_state: platform_desc_scroll_state,
+                            desc_cache: platform_desc_cache,
                         },
                     );
                 }

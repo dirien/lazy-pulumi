@@ -12,7 +12,7 @@ Terminal UI application for Pulumi Cloud built with Ratatui and Tokio. Uses The 
 | Layer | Location | Responsibility |
 |-------|----------|----------------|
 | Model | `app/types.rs` | Pure data types defining application state |
-| Update | `app/handlers.rs` | Event handlers that modify state |
+| Update | `app/handlers/` | Event handlers that modify state (split by tab) |
 | View | `app/mod.rs` + `ui/` | Renders state to terminal |
 
 ## Application Flow
@@ -20,7 +20,7 @@ Terminal UI application for Pulumi Cloud built with Ratatui and Tokio. Uses The 
 1. `main.rs` initializes color-eyre, tui-logger, creates `App`, calls `app.run()`
 2. `App::new()` sets up terminal, event handler, API client, loads initial data
 3. `App::run()` enters async loop: render -> poll events -> handle input
-4. `handlers.rs` dispatches to tab-specific handlers
+4. `handlers/` dispatches to tab-specific handler modules
 5. API calls are async and set `is_loading` flag during requests
 
 ## State Management
@@ -44,7 +44,7 @@ Terminal UI application for Pulumi Cloud built with Ratatui and Tokio. Uses The 
 ## Startup Checks (Async)
 
 Startup checks run asynchronously to keep UI responsive:
-- `spawn_startup_checks()` in `handlers.rs` spawns background tasks
+- `spawn_startup_checks()` in `handlers/startup.rs` spawns background tasks
 - Uses `StartupCheckResult` enum and tokio channel
 - Checks: `PULUMI_ACCESS_TOKEN` env var, Pulumi CLI availability
 
