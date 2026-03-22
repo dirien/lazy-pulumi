@@ -13,7 +13,7 @@ Central state machine managing UI state, data, and event loop. Implements TEA pa
 |------|--------|---------|
 | `mod.rs` | ~880 | App struct, new(), run(), render() |
 | `types.rs` | ~470 | Model: Tab, FocusMode, NeoTaskSettings, AppState |
-| `handlers.rs` | ~650 | Update: All keyboard event handlers |
+| `handlers/` | ~1800 | Update: Keyboard event handlers (split by tab) |
 | `data.rs` | ~420 | Data loading & refresh logic |
 | `neo.rs` | ~440 | Neo AI agent async operations |
 
@@ -22,7 +22,7 @@ Central state machine managing UI state, data, and event loop. Implements TEA pa
 | Layer | File | Responsibility |
 |-------|------|----------------|
 | Model | `types.rs` | `AppState`, `Tab`, `FocusMode`, `PlatformView`, async result enums |
-| Update | `handlers.rs` | `handle_key()` dispatches to tab-specific handlers |
+| Update | `handlers/` | `handle_key()` dispatches to tab-specific handler modules |
 | View | `mod.rs` | `render()` method produces UI from state |
 
 ## Key Types
@@ -39,14 +39,20 @@ struct AppState { stacks, environments, neo_tasks, resources, ... }
 
 `NeoApprovalMode`, `NeoPermissionMode`, `NeoPlanMode` each have `cycle()`, `label()`, and `api_value()` methods. The `Default` variant shows the actual value (e.g., "Manual (org default)") and returns `None` for `api_value()` so the field is omitted from the API request.
 
-## Event Handlers (handlers.rs)
+## Event Handlers (handlers/)
 
-- `handle_key()` — Main dispatcher
-- `handle_stacks_key()` — Stacks tab navigation
-- `handle_esc_key()` — ESC environments
-- `handle_neo_key()` — Neo chat
-- `handle_platform_key()` — Platform view
-- `handle_commands_key()` — Commands tab
+Directory module split by tab. `mod.rs` re-exports the `handle_key()` dispatcher.
+
+| File | Handler | Purpose |
+|------|---------|---------|
+| `global.rs` | `handle_key()` | Main dispatcher, global keys, popups |
+| `stacks.rs` | `handle_stacks_key()` | Stacks tab navigation |
+| `esc.rs` | `handle_esc_key()` | ESC environments |
+| `neo.rs` | `handle_neo_key()` | Neo chat, slash commands, task settings |
+| `platform.rs` | `handle_platform_key()` | Platform view |
+| `commands.rs` | `handle_commands_key()` | Commands tab |
+| `org_selector.rs` | `handle_org_selector_key()` | Organization picker |
+| `startup.rs` | `spawn_startup_checks()` | Async startup checks |
 
 ## Neo Chat State Variables
 
@@ -155,12 +161,12 @@ PTY execution via `portable-pty` crate with deduplication filtering for repeated
 
 ## Checklist
 - [ ] New `Tab` variant added to `types.rs` if adding a view
-- [ ] Handler added to `handlers.rs` with `FocusMode` checks
+- [ ] Handler added to appropriate `handlers/*.rs` module with `FocusMode` checks
 - [ ] Data loading in `data.rs` if new API data needed
 - [ ] `cargo test` passes
 
 ## Examples
-> See `handlers.rs` for handler patterns, `data.rs` for async loading patterns.
+> See `handlers/global.rs` for dispatch pattern, `handlers/stacks.rs` for simple handler, `data.rs` for async loading.
 
 ## When stuck
 - Check `../AGENTS.md` for architecture overview

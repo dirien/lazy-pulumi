@@ -25,6 +25,8 @@ pub struct PlatformViewProps<'a> {
     pub packages: &'a mut StatefulList<RegistryPackage>,
     pub templates: &'a mut StatefulList<RegistryTemplate>,
     pub description_scroll_state: &'a mut ScrollViewState,
+    /// Cached markdown description lines (cache key, rendered lines)
+    pub desc_cache: &'a mut Option<(String, Vec<Line<'static>>)>,
 }
 
 /// Render the platform view with Services, Components, and Templates
@@ -68,6 +70,7 @@ pub fn render_platform_view(
                 content_chunks[1],
                 props.private_packages.selected(),
                 props.description_scroll_state,
+                props.desc_cache,
             );
         }
         PlatformView::Registry => {
@@ -84,6 +87,7 @@ pub fn render_platform_view(
                 content_chunks[1],
                 props.packages.selected(),
                 props.description_scroll_state,
+                props.desc_cache,
             );
         }
         PlatformView::Templates => {
@@ -331,6 +335,7 @@ fn render_package_details(
     area: Rect,
     selected: Option<&RegistryPackage>,
     scroll_state: &mut ScrollViewState,
+    desc_cache: &mut Option<(String, Vec<Line<'static>>)>,
 ) {
     let block = Block::default()
         .borders(Borders::ALL)
@@ -392,7 +397,19 @@ fn render_package_details(
                 .as_deref()
                 .or(pkg.description.as_deref())
                 .unwrap_or("No description available");
-            let desc_lines = render_markdown_content(description, theme, "");
+
+            // Cache key: package identity + whether readme is loaded
+            let cache_key = format!("{}:{}", pkg.key(), pkg.readme_content.is_some());
+
+            // Use cached lines if the key matches, otherwise re-render
+            let desc_lines = match desc_cache {
+                Some((ref key, ref lines)) if *key == cache_key => lines.clone(),
+                _ => {
+                    let lines = render_markdown_content(description, theme, "");
+                    *desc_cache = Some((cache_key, lines.clone()));
+                    lines
+                }
+            };
 
             // Calculate content height
             let content_height = desc_lines.len().max(1) as u16;

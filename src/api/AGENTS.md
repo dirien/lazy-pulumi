@@ -11,7 +11,11 @@ Async HTTP client for Pulumi Cloud REST API using reqwest + progenitor-generated
 
 | File | Purpose |
 |------|---------|
-| `client.rs` | `PulumiClient` — thin wrappers over generated client or raw reqwest |
+| `client.rs` | `PulumiClient` struct, constructor, shared helpers |
+| `client_stacks.rs` | Stack API methods |
+| `client_esc.rs` | ESC environment API methods |
+| `client_neo.rs` | Neo task/event/slash-command API methods |
+| `client_platform.rs` | Registry packages, templates, services, resources, dashboard |
 | `domain.rs` | App-level types (used by UI, handlers, state) |
 | `convert.rs` | `From<generated::Type>` impls mapping generated -> domain types |
 | `generated.rs` | `include!()` wrapper for progenitor output (**DO NOT EDIT**) |
@@ -113,7 +117,7 @@ curl -s -H "Authorization: token $TOKEN" \
 ## Checklist
 - [ ] Domain type in `domain.rs`
 - [ ] Conversion in `convert.rs` with test (Route A)
-- [ ] Client method in `client.rs`
+- [ ] Client method in appropriate `client*.rs` module
 - [ ] Export in `mod.rs`
 - [ ] `cargo test` + `cargo clippy -- -D warnings` pass
 

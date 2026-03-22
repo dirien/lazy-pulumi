@@ -174,7 +174,16 @@ src/
 ├── app/             # Application core (TEA pattern)
 │   ├── mod.rs       # App struct, new(), run(), render()
 │   ├── types.rs     # Model: Tab, FocusMode, AppState, async result types
-│   ├── handlers.rs  # Update: All keyboard event handlers
+│   ├── handlers/    # Update: Keyboard event handlers (split by tab)
+│   │   ├── mod.rs       # Re-exports handle_key() dispatcher
+│   │   ├── global.rs    # Global keys, popups, tab switching
+│   │   ├── stacks.rs    # Stacks tab navigation
+│   │   ├── esc.rs       # ESC environments
+│   │   ├── neo.rs       # Neo chat, slash commands, task settings
+│   │   ├── platform.rs  # Platform view
+│   │   ├── commands.rs  # Commands tab
+│   │   ├── org_selector.rs # Organization picker
+│   │   └── startup.rs   # Async startup checks
 │   ├── data.rs      # Data loading & refresh logic
 │   └── neo.rs       # Neo AI agent async operations
 ├── event.rs         # Event handling (keyboard, mouse)
@@ -185,10 +194,14 @@ src/
 ├── logging.rs       # File-based logging system
 ├── api/             # Pulumi API client (progenitor-generated + hand-written)
 │   ├── mod.rs
-│   ├── client.rs    # HTTP client (thin wrappers over generated client)
-│   ├── domain.rs    # App-level types (Stacks, ESC, Neo, Resources, Registry)
-│   ├── convert.rs   # From<generated::Type> → domain type conversions
-│   └── generated.rs # include!() wrapper for progenitor output
+│   ├── client.rs          # PulumiClient struct, constructor, shared helpers
+│   ├── client_stacks.rs   # Stack API methods
+│   ├── client_esc.rs      # ESC environment API methods
+│   ├── client_neo.rs      # Neo task/event/slash-command API methods
+│   ├── client_platform.rs # Registry, templates, services, resources, dashboard
+│   ├── domain.rs          # App-level types (Stacks, ESC, Neo, Resources, Registry)
+│   ├── convert.rs         # From<generated::Type> → domain type conversions
+│   └── generated.rs       # include!() wrapper for progenitor output
 ├── components/      # Reusable UI components
 │   ├── mod.rs
 │   ├── input.rs     # Text input field
@@ -199,7 +212,11 @@ src/
     ├── dashboard.rs # Overview with stats widgets
     ├── stacks.rs    # Stack list and update history
     ├── esc.rs       # ESC environments with YAML/resolved values
-    ├── neo.rs       # Chat interface for Pulumi's AI agent
+    ├── neo/         # Chat interface for Pulumi's AI agent
+    │   ├── mod.rs           # Layout, task list, main render
+    │   ├── chat.rs          # Chat messages with markdown rendering
+    │   ├── details.rs       # Task details dialog
+    │   └── slash_commands.rs # Slash commands management dialog
     ├── platform.rs  # Services, Components, Templates browser
     ├── header.rs    # Tab bar with organization display
     ├── help.rs      # Keyboard shortcut overlay

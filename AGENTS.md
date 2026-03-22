@@ -55,7 +55,7 @@ src/             <- Application source (see scoped AGENTS.md)
 | Domain types | `src/api/domain.rs` | `#[derive(Debug, Clone, Serialize, Deserialize)]`, `#[serde(rename_all = "camelCase")]` |
 | Type conversion | `src/api/convert.rs` | `From<gen::Type>` impls, unit tests at bottom |
 | API client | `src/api/client.rs` | Generated wrapper or raw reqwest, `org_or_default()` |
-| Key handler | `src/app/handlers.rs` | `handle_*_key()`, `FocusMode` checks |
+| Key handler | `src/app/handlers/` | `handle_*_key()`, `FocusMode` checks (split by tab) |
 | UI view | `src/ui/stacks.rs` | Layout splitting, `StatefulList` rendering |
 | Adding endpoint | `src/api/ADDING_ENDPOINTS.md` | Route A (generated) vs Route B (raw reqwest) |
 
@@ -81,7 +81,7 @@ src/             <- Application source (see scoped AGENTS.md)
 
 ## Architecture
 
-**TEA pattern**: Model (`app/types.rs`) -> Update (`app/handlers.rs`) -> View (`ui/`)
+**TEA pattern**: Model (`app/types.rs`) -> Update (`app/handlers/`) -> View (`ui/`)
 
 **Key concepts**: `FocusMode::Normal` vs `Input`, tokio channels for async, `build.rs` generates API client from `KEPT_PATHS` subset of OpenAPI spec.
 

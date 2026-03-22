@@ -15,7 +15,7 @@ Renders application state to Ratatui frames. Pure view layer — no state mutati
 | `commands.rs` | Commands | Pulumi CLI command execution with streaming output |
 | `stacks.rs` | Stacks | Stack list and update history |
 | `esc.rs` | ESC | Environments list, YAML editor |
-| `neo.rs` | Neo | Chat interface with markdown rendering |
+| `neo/` | Neo | Chat interface with markdown rendering (split into submodules) |
 | `platform.rs` | Platform | Services, Private Components, Registry, Templates |
 | `header.rs` | Header | Tab bar with organization display |
 | `help.rs` | Help | Keyboard shortcut overlay |
@@ -99,7 +99,7 @@ LazyGit-style Pulumi CLI execution interface.
 - [ ] `cargo clippy -- -D warnings` clean
 
 ## Examples
-> See `stacks.rs` for canonical view pattern, `neo.rs` for complex scrollable view.
+> See `stacks.rs` for canonical view pattern, `neo/` for complex scrollable view (split into `chat.rs`, `details.rs`, `slash_commands.rs`).
 
 ## When stuck
 - Check `../app/AGENTS.md` for state management
