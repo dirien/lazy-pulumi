@@ -16,7 +16,7 @@ Renders application state to Ratatui frames. Pure view layer — no state mutati
 | `stacks.rs` | Stacks | Stack list and update history |
 | `esc.rs` | ESC | Environments list, YAML editor |
 | `neo.rs` | Neo | Chat interface with markdown rendering |
-| `platform.rs` | Platform | Services, Components, Templates |
+| `platform.rs` | Platform | Services, Private Components, Registry, Templates |
 | `header.rs` | Header | Tab bar with organization display |
 | `help.rs` | Help | Keyboard shortcut overlay |
 | `logs.rs` | Logs | tui-logger widget |

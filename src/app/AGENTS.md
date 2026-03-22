@@ -29,6 +29,7 @@ Central state machine managing UI state, data, and event loop. Implements TEA pa
 ```rust
 enum Tab { Dashboard, Commands, Neo, Stacks, Esc, Platform }
 enum FocusMode { Normal, Input }
+enum PlatformView { Services, PrivateComponents, Registry, Templates }
 struct AppState { stacks, environments, neo_tasks, resources, ... }
 ```
 

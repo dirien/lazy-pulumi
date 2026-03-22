@@ -1,6 +1,6 @@
 //! Platform view rendering
 //!
-//! Displays Services, Components (Registry Packages), and Templates in a tabbed view.
+//! Displays Services, Private Components, Registry, and Templates in a tabbed view.
 
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect, Size},
@@ -21,6 +21,7 @@ use super::markdown::render_markdown_content;
 pub struct PlatformViewProps<'a> {
     pub current_view: PlatformView,
     pub services: &'a mut StatefulList<Service>,
+    pub private_packages: &'a mut StatefulList<RegistryPackage>,
     pub packages: &'a mut StatefulList<RegistryPackage>,
     pub templates: &'a mut StatefulList<RegistryTemplate>,
     pub description_scroll_state: &'a mut ScrollViewState,
@@ -53,8 +54,30 @@ pub fn render_platform_view(
             render_services_list(frame, theme, content_chunks[0], props.services);
             render_service_details(frame, theme, content_chunks[1], props.services.selected());
         }
-        PlatformView::Components => {
-            render_packages_list(frame, theme, content_chunks[0], props.packages);
+        PlatformView::PrivateComponents => {
+            render_packages_list(
+                frame,
+                theme,
+                content_chunks[0],
+                props.private_packages,
+                " Private Components ",
+            );
+            render_package_details(
+                frame,
+                theme,
+                content_chunks[1],
+                props.private_packages.selected(),
+                props.description_scroll_state,
+            );
+        }
+        PlatformView::Registry => {
+            render_packages_list(
+                frame,
+                theme,
+                content_chunks[0],
+                props.packages,
+                " Registry ",
+            );
             render_package_details(
                 frame,
                 theme,
@@ -233,6 +256,7 @@ fn render_packages_list(
     theme: &Theme,
     area: Rect,
     packages: &mut StatefulList<RegistryPackage>,
+    title: &str,
 ) {
     let selected_idx = packages.selected_index();
     let is_empty = packages.is_empty();
@@ -244,7 +268,7 @@ fn render_packages_list(
         } else {
             theme.border_focused()
         })
-        .title(" Components (Packages) ")
+        .title(title)
         .title_style(theme.subtitle());
 
     if is_empty {

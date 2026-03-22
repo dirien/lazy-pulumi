@@ -267,6 +267,20 @@ fn patch_nullable_fields(schemas: &mut serde_json::Map<String, serde_json::Value
 }
 ```
 
+**Type mismatch — spec says array/object but API returns a string**:
+Use `set_property_type_string` to replace the property schema with `{ "type": "string" }`:
+
+```rust
+set_property_type_string(schemas, "SchemaName", "fieldName");
+```
+
+**additionalProperties too restrictive — spec says object values but API returns strings**:
+Use `set_additional_properties_any` to accept any JSON value:
+
+```rust
+set_additional_properties_any(schemas, "SchemaName", "fieldName");
+```
+
 ### Generated method name doesn't match expectations
 
 Progenitor derives method names from `operationId` in the spec. To override:

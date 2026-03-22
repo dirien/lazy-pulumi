@@ -30,9 +30,9 @@ impl From<gen::AppStackSummary> for domain::Stack {
 impl From<gen::OrgEnvironment> for domain::EscEnvironmentSummary {
     fn from(e: gen::OrgEnvironment) -> Self {
         Self {
-            organization: e.organization.unwrap_or_default(),
+            organization: e.organization,
             project: e.project.unwrap_or_default(),
-            name: e.name.unwrap_or_default(),
+            name: e.name,
             created: Some(e.created),
             modified: Some(e.modified),
         }
@@ -216,7 +216,11 @@ impl From<gen::Template> for domain::RegistryTemplate {
             publisher: Some(t.publisher),
             source: Some(t.source),
             version: None,
-            display_name: Some(t.display_name),
+            display_name: if t.display_name.is_empty() {
+                None
+            } else {
+                Some(t.display_name)
+            },
             description: t.description,
             language: Some(t.language.to_string()),
             runtime: t.runtime.map(|r| domain::TemplateRuntime {
@@ -276,9 +280,9 @@ mod tests {
             .expect("valid EnvironmentSettings");
         gen::OrgEnvironment::builder()
             .id("env-id-1")
-            .organization(org.map(String::from))
+            .organization(org.unwrap_or_default())
             .project(project.map(String::from))
-            .name(name.map(String::from))
+            .name(name.unwrap_or_default())
             .created(created)
             .modified(modified)
             .referrer_metadata(referrer_metadata)
@@ -313,6 +317,8 @@ mod tests {
             .created_at(Utc::now())
             .created_by(make_user_info("test-user"))
             .entities(entities)
+            .approval_mode(gen::AgentTaskApprovalMode::Manual)
+            .plan_mode(false)
             .try_into()
             .expect("valid AgentTask")
     }
@@ -617,6 +623,8 @@ mod tests {
             .created_by(make_user_info("user"))
             .entities(vec![])
             .shared_at(Some(now))
+            .approval_mode(gen::AgentTaskApprovalMode::Manual)
+            .plan_mode(false)
             .try_into()
             .expect("valid AgentTask");
         let task: domain::NeoTask = gen_task.into();
@@ -1059,7 +1067,7 @@ mod tests {
             .updated_at(Utc::now())
             .runtime(Some(gen::TemplateRuntimeInfo {
                 name: Some("python".to_string()),
-                options: HashMap::new(),
+                options: serde_json::Map::new(),
             }))
             .try_into()
             .expect("valid Template");

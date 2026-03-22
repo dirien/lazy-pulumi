@@ -87,8 +87,8 @@ impl App {
             let org = self.state.organization.clone();
             let tx = self.data_result_tx.clone();
 
-            // Track how many loads we're starting (now 10 with slash commands)
-            self.pending_data_loads = 10;
+            // Track how many loads we're starting (11 with private packages split)
+            self.pending_data_loads = 11;
             self.is_loading = true;
             self.spinner.set_message("Loading data...");
 
@@ -169,17 +169,41 @@ impl App {
                 }
             });
 
+            // Private packages
+            let client6a = client.clone();
+            let org6a = org.clone();
+            let tx6a = tx.clone();
+            tokio::spawn(async move {
+                match client6a
+                    .list_registry_packages(org6a.as_deref(), Some("private"))
+                    .await
+                {
+                    Ok(packages) => {
+                        let _ = tx6a.send(DataLoadResult::PrivatePackages(packages)).await;
+                    }
+                    Err(e) => {
+                        let _ = tx6a
+                            .send(DataLoadResult::Error(format!("Private packages: {}", e)))
+                            .await;
+                    }
+                }
+            });
+
+            // Public registry packages
             let client6 = client.clone();
             let org6 = org.clone();
             let tx6 = tx.clone();
             tokio::spawn(async move {
-                match client6.list_registry_packages(org6.as_deref()).await {
+                match client6
+                    .list_registry_packages(org6.as_deref(), Some("public"))
+                    .await
+                {
                     Ok(packages) => {
                         let _ = tx6.send(DataLoadResult::RegistryPackages(packages)).await;
                     }
                     Err(e) => {
                         let _ = tx6
-                            .send(DataLoadResult::Error(format!("Packages: {}", e)))
+                            .send(DataLoadResult::Error(format!("Registry packages: {}", e)))
                             .await;
                     }
                 }
@@ -288,14 +312,22 @@ impl App {
                     self.state.resources = resources;
                 }
                 DataLoadResult::Services(services) => {
+                    log::info!("Received {} services", services.len());
                     self.state.services = services.clone();
                     self.services_list.set_items(services);
                 }
+                DataLoadResult::PrivatePackages(packages) => {
+                    log::info!("Received {} private packages", packages.len());
+                    self.state.private_packages = packages.clone();
+                    self.private_packages_list.set_items(packages);
+                }
                 DataLoadResult::RegistryPackages(packages) => {
+                    log::info!("Received {} registry packages", packages.len());
                     self.state.registry_packages = packages.clone();
                     self.packages_list.set_items(packages);
                 }
                 DataLoadResult::RegistryTemplates(templates) => {
+                    log::info!("Received {} registry templates", templates.len());
                     self.state.registry_templates = templates.clone();
                     self.templates_list.set_items(templates);
                 }
@@ -309,7 +341,15 @@ impl App {
                     package_key,
                     content,
                 } => {
-                    // Find the package and update its readme_content
+                    // Find the package in either list and update its readme_content
+                    if let Some(pkg) = self
+                        .private_packages_list
+                        .items_mut()
+                        .iter_mut()
+                        .find(|p| p.key() == package_key)
+                    {
+                        pkg.readme_content = Some(content.clone());
+                    }
                     if let Some(pkg) = self
                         .packages_list
                         .items_mut()
@@ -334,10 +374,36 @@ impl App {
 
     /// Load README for the currently selected package (if not already loaded)
     pub(super) fn spawn_readme_load_for_selected_package(&self) {
+        self.spawn_readme_load_for_package_in_list(&self.packages_list);
+    }
+
+    /// Load README for the currently selected private package (if not already loaded)
+    pub(super) fn spawn_readme_load_for_selected_private_package(&self) {
+        self.spawn_readme_load_for_package_in_list(&self.private_packages_list);
+    }
+
+    /// Trigger README load for whichever package view is currently active
+    pub(super) fn spawn_readme_for_current_platform_view(&self) {
+        use crate::app::PlatformView;
+        match self.platform_view {
+            PlatformView::PrivateComponents => {
+                self.spawn_readme_load_for_selected_private_package();
+            }
+            PlatformView::Registry => {
+                self.spawn_readme_load_for_selected_package();
+            }
+            _ => {}
+        }
+    }
+
+    fn spawn_readme_load_for_package_in_list(
+        &self,
+        list: &crate::components::StatefulList<crate::api::RegistryPackage>,
+    ) {
         let Some(client) = &self.client else {
             return;
         };
-        if let Some(pkg) = self.packages_list.selected() {
+        if let Some(pkg) = list.selected() {
             // Only load if README URL exists and content hasn't been loaded yet
             if pkg.readme_content.is_some() {
                 return;
