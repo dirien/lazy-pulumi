@@ -225,6 +225,139 @@ impl PlatformView {
     }
 }
 
+/// Neo task approval mode for new task creation
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum NeoApprovalMode {
+    /// Use org default (Manual) — don't send the field
+    #[default]
+    Default,
+    Manual,
+    Auto,
+    Balanced,
+}
+
+impl NeoApprovalMode {
+    pub fn cycle(&self) -> Self {
+        match self {
+            Self::Default => Self::Manual,
+            Self::Manual => Self::Auto,
+            Self::Auto => Self::Balanced,
+            Self::Balanced => Self::Default,
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Default => "Manual (org default)",
+            Self::Manual => "Manual",
+            Self::Auto => "Auto",
+            Self::Balanced => "Balanced",
+        }
+    }
+
+    /// Returns the API value to send, or None if using org default
+    pub fn api_value(&self) -> Option<&'static str> {
+        match self {
+            Self::Default => None,
+            Self::Manual => Some("manual"),
+            Self::Auto => Some("auto"),
+            Self::Balanced => Some("balanced"),
+        }
+    }
+}
+
+/// Neo task permission mode for new task creation
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum NeoPermissionMode {
+    /// Use org default (Full) — don't send the field
+    #[default]
+    Default,
+    Full,
+    ReadOnly,
+}
+
+impl NeoPermissionMode {
+    pub fn cycle(&self) -> Self {
+        match self {
+            Self::Default => Self::Full,
+            Self::Full => Self::ReadOnly,
+            Self::ReadOnly => Self::Default,
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Default => "Full (org default)",
+            Self::Full => "Full",
+            Self::ReadOnly => "Read-only",
+        }
+    }
+
+    /// Returns the API value to send, or None if using org default
+    pub fn api_value(&self) -> Option<&'static str> {
+        match self {
+            Self::Default => None,
+            Self::Full => Some("default"),
+            Self::ReadOnly => Some("read-only"),
+        }
+    }
+}
+
+/// Neo task plan mode for new task creation
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum NeoPlanMode {
+    /// Use org default (Off) — don't send the field
+    #[default]
+    Default,
+    On,
+    Off,
+}
+
+impl NeoPlanMode {
+    pub fn cycle(&self) -> Self {
+        match self {
+            Self::Default => Self::On,
+            Self::On => Self::Off,
+            Self::Off => Self::Default,
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Default => "Off (org default)",
+            Self::On => "On",
+            Self::Off => "Off",
+        }
+    }
+
+    /// Returns the API value to send, or None if using org default
+    pub fn api_value(&self) -> Option<bool> {
+        match self {
+            Self::Default => None,
+            Self::On => Some(true),
+            Self::Off => Some(false),
+        }
+    }
+}
+
+/// Settings for creating a new Neo task
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NeoTaskSettings {
+    pub approval_mode: NeoApprovalMode,
+    pub permission_mode: NeoPermissionMode,
+    pub plan_mode: NeoPlanMode,
+}
+
+impl NeoTaskSettings {
+    /// Returns true if any setting differs from org default
+    #[allow(dead_code)]
+    pub fn has_overrides(&self) -> bool {
+        self.approval_mode != NeoApprovalMode::Default
+            || self.permission_mode != NeoPermissionMode::Default
+            || self.plan_mode != NeoPlanMode::Default
+    }
+}
+
 /// Application state - holds all data fetched from APIs
 #[derive(Default)]
 pub struct AppState {

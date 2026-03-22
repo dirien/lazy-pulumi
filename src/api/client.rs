@@ -689,17 +689,30 @@ impl PulumiClient {
         &self,
         org: &str,
         query: &str,
+        approval_mode: Option<&str>,
+        permission_mode: Option<&str>,
+        plan_mode: Option<bool>,
     ) -> Result<NeoTaskResponse, ApiError> {
         let url = format!("{}/api/preview/agents/{}/tasks", self.config.base_url, org);
 
         let timestamp = chrono::Utc::now().to_rfc3339();
-        let body = serde_json::json!({
+        let mut body = serde_json::json!({
             "message": {
                 "type": "user_message",
                 "content": query,
                 "timestamp": timestamp
             }
         });
+
+        if let Some(mode) = approval_mode {
+            body["approvalMode"] = serde_json::Value::String(mode.to_string());
+        }
+        if let Some(mode) = permission_mode {
+            body["permissionMode"] = serde_json::Value::String(mode.to_string());
+        }
+        if let Some(mode) = plan_mode {
+            body["planMode"] = serde_json::Value::Bool(mode);
+        }
 
         let response = self.client.post(&url).json(&body).send().await?;
 
@@ -1123,6 +1136,9 @@ impl PulumiClient {
         org: &str,
         content: &str,
         commands: &[NeoSlashCommand],
+        approval_mode: Option<&str>,
+        permission_mode: Option<&str>,
+        plan_mode: Option<bool>,
     ) -> Result<NeoTaskResponse, ApiError> {
         let url = format!("{}/api/preview/agents/{}/tasks", self.config.base_url, org);
 
@@ -1161,7 +1177,17 @@ impl PulumiClient {
             commands: Some(commands_map),
         };
 
-        let body = serde_json::json!({ "message": message });
+        let mut body = serde_json::json!({ "message": message });
+
+        if let Some(mode) = approval_mode {
+            body["approvalMode"] = serde_json::Value::String(mode.to_string());
+        }
+        if let Some(mode) = permission_mode {
+            body["permissionMode"] = serde_json::Value::String(mode.to_string());
+        }
+        if let Some(mode) = plan_mode {
+            body["planMode"] = serde_json::Value::Bool(mode);
+        }
 
         log::debug!("Creating Neo task with {} commands", commands.len());
         let response = self.client.post(&url).json(&body).send().await?;

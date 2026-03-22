@@ -71,6 +71,7 @@ impl From<gen::AgentTask> for domain::NeoTask {
                 .map(Into::into)
                 .collect(),
             policies: vec![],
+            plan_mode: Some(t.plan_mode),
         }
     }
 }
@@ -1067,7 +1068,7 @@ mod tests {
             .updated_at(Utc::now())
             .runtime(Some(gen::TemplateRuntimeInfo {
                 name: Some("python".to_string()),
-                options: serde_json::Map::new(),
+                options: std::collections::HashMap::new(),
             }))
             .try_into()
             .expect("valid Template");

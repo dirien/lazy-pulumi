@@ -275,6 +275,9 @@ pub struct NeoTask {
     /// Active policies
     #[serde(default, deserialize_with = "null_to_empty_vec")]
     pub policies: Vec<NeoPolicy>,
+    /// Whether this task runs in plan mode
+    #[serde(default)]
+    pub plan_mode: Option<bool>,
 }
 
 /// User who started a Neo task
