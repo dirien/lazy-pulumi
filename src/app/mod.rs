@@ -653,6 +653,7 @@ impl App {
                             task_settings: neo_task_settings,
                             show_settings: neo_show_settings,
                             current_task_plan_mode: neo_current_task_plan_mode,
+                            has_loaded_task: state.current_task_id.is_some(),
                         },
                     );
                 }
@@ -753,7 +754,7 @@ impl App {
 
             // Loading overlay
             if is_loading && tab != Tab::Neo {
-                ui::render_loading(frame, theme, spinner_message, spinner_char);
+                ui::render_loading(frame, theme, content_area, spinner_message, spinner_char);
             }
         })?;
 

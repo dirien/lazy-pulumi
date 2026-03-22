@@ -1112,4 +1112,29 @@ mod tests {
         let tmpl: domain::RegistryTemplate = gen_tmpl.into();
         assert_eq!(tmpl.description, Some("A template description".to_string()));
     }
+
+    #[test]
+    fn neo_task_conversion_plan_mode_false() {
+        let gen_task = make_agent_task("t1", "task", gen::AgentTaskStatus::Running, false, vec![]);
+        let task: domain::NeoTask = gen_task.into();
+        assert_eq!(task.plan_mode, Some(false));
+    }
+
+    #[test]
+    fn neo_task_conversion_plan_mode_true() {
+        let gen_task: gen::AgentTask = gen::AgentTask::builder()
+            .id("t2")
+            .name("plan task")
+            .status(gen::AgentTaskStatus::Running)
+            .is_shared(false)
+            .created_at(Utc::now())
+            .created_by(make_user_info("user"))
+            .entities(Vec::<gen::AgentEntity>::new())
+            .approval_mode(gen::AgentTaskApprovalMode::Manual)
+            .plan_mode(true)
+            .try_into()
+            .expect("valid AgentTask");
+        let task: domain::NeoTask = gen_task.into();
+        assert_eq!(task.plan_mode, Some(true));
+    }
 }

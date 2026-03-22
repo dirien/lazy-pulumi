@@ -301,8 +301,40 @@ impl App {
                     self.esc_list.set_items(envs);
                 }
                 DataLoadResult::NeoTasks(tasks) => {
+                    let should_auto_load = !tasks.is_empty()
+                        && self.state.current_task_id.is_none()
+                        && self.state.neo_tasks.is_empty();
                     self.state.neo_tasks = tasks.clone();
                     self.neo_tasks_list.set_items(tasks);
+                    // Auto-select first task and load its messages
+                    if should_auto_load {
+                        self.neo_tasks_list.select(Some(0));
+                        if let Some(task) = self.state.neo_tasks.first() {
+                            let task_id = task.id.clone();
+                            self.state.current_task_id = Some(task_id.clone());
+                            // Spawn async load of task messages
+                            if let (Some(ref client), Some(org)) =
+                                (&self.client, &self.state.organization)
+                            {
+                                let client = client.clone();
+                                let org = org.clone();
+                                let tx = self.neo_result_tx.clone();
+                                tokio::spawn(async move {
+                                    if let Ok(response) =
+                                        client.continue_neo_task(&org, &task_id, None).await
+                                    {
+                                        let _ = tx
+                                            .send(crate::app::NeoAsyncResult::EventsReceived {
+                                                messages: response.messages,
+                                                has_more: response.has_more,
+                                                task_status: None,
+                                            })
+                                            .await;
+                                    }
+                                });
+                            }
+                        }
+                    }
                 }
                 DataLoadResult::NeoSlashCommands(commands) => {
                     log::info!("Received {} Neo slash commands", commands.len());

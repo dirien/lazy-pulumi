@@ -55,6 +55,8 @@ pub struct NeoViewProps<'a> {
     pub show_settings: bool,
     /// Whether the current (already created) task has plan mode enabled
     pub current_task_plan_mode: bool,
+    /// Whether a task is currently loaded (current_task_id is Some)
+    pub has_loaded_task: bool,
 }
 
 /// Props for chat view (internal)
@@ -69,6 +71,7 @@ struct ChatViewProps<'a> {
     task_settings: NeoTaskSettings,
     show_settings: bool,
     current_task_plan_mode: bool,
+    has_loaded_task: bool,
 }
 
 /// Render the Neo chat view
@@ -84,6 +87,7 @@ pub fn render_neo_view(frame: &mut Frame, theme: &Theme, area: Rect, props: NeoV
         task_settings: props.task_settings,
         show_settings: props.show_settings,
         current_task_plan_mode: props.current_task_plan_mode,
+        has_loaded_task: props.has_loaded_task,
     };
 
     if props.hide_task_list {
@@ -234,10 +238,12 @@ fn render_chat_view(frame: &mut Frame, theme: &Theme, area: Rect, props: ChatVie
     frame.render_widget(messages_block, chunks[0]);
 
     if props.messages.is_empty() {
-        // Show welcome message or loading indicator
         if props.is_loading {
             // Just show empty area while loading - the thinking indicator below will show
+        } else if props.has_loaded_task {
+            // Task is loaded but has no messages yet — shouldn't normally happen
         } else {
+            // No task loaded — show welcome or "press Enter" hint
             let welcome_lines = vec![
                 Line::from(""),
                 Line::from(vec![
