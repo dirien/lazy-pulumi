@@ -42,11 +42,20 @@ Uses `tui-scrollview` for proper scroll handling.
 ### Markdown Support
 Bold (`**text**`), italic (`*text*`), inline code (backticks), code blocks (triple backticks with language labels), headers (`#`/`##`/`###`), lists (`-`/`*`/`1.`).
 
+### Task Settings Bar
+Shown above the input field when composing a new task (no `current_task_id`). Displays current approval, permission, and plan mode with key hints (`a`/`p`/`m` to cycle). Uses descriptive labels like "Approval Manual (org default) (a)".
+
+### Plan Mode Visual Indicator
+When plan mode is active (either selected for new task or persisted on current task via `plan_mode` field), the chat and input blocks use `BorderType::LightDoubleDashed` with warning color, and the title shows " Chat [PLAN] ".
+
 ### Thinking Indicator
 Dedicated 2-line area between chat and input. Visible when: `neo_polling || is_loading || neo_task_is_running`. Animated spinner with "Neo is thinking..."
 
 ### Message Types
 `UserMessage`, `AssistantMessage` (markdown rendered), `ToolCall`, `ToolResponse` (truncated), `ApprovalRequest`, `TaskNameChange`
+
+### Task Details Dialog
+Press `d` to show task metadata. Includes plan/execute mode indicator.
 
 ### Slash Commands Management Dialog
 `render_slash_commands_dialog()` — List view, Detail view (scrollable), Create/Edit forms, Delete confirmation.

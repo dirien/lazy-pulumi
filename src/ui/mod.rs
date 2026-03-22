@@ -80,9 +80,28 @@ pub fn render_error_popup(frame: &mut Frame, theme: &Theme, message: &str) {
     frame.render_widget(paragraph, area);
 }
 
-/// Render a loading indicator
-pub fn render_loading(frame: &mut Frame, theme: &Theme, message: &str, spinner_char: &str) {
-    let area = centered_rect(40, 10, frame.area());
+/// Render a loading indicator overlaid on top of the current view
+pub fn render_loading(
+    frame: &mut Frame,
+    theme: &Theme,
+    content_area: Rect,
+    message: &str,
+    spinner_char: &str,
+) {
+    // Use a fixed-height popup (3 rows = border + text + border) so text is always visible
+    let height = 3_u16;
+    let width = (content_area.width * 50 / 100)
+        .max(30)
+        .min(content_area.width);
+    let area = Rect {
+        x: content_area.x + (content_area.width.saturating_sub(width)) / 2,
+        y: content_area.y + (content_area.height.saturating_sub(height)) / 2,
+        width,
+        height: height.min(content_area.height),
+    };
+
+    // Clear only the popup area so the dashboard stays visible behind
+    frame.render_widget(Clear, area);
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -94,7 +113,6 @@ pub fn render_loading(frame: &mut Frame, theme: &Theme, message: &str, spinner_c
         .block(block)
         .alignment(Alignment::Center);
 
-    frame.render_widget(ratatui::widgets::Clear, area);
     frame.render_widget(paragraph, area);
 }
 

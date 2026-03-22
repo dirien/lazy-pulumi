@@ -225,6 +225,249 @@ impl PlatformView {
     }
 }
 
+/// Neo task approval mode for new task creation
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum NeoApprovalMode {
+    /// Use org default (Manual) — don't send the field
+    #[default]
+    Default,
+    Manual,
+    Auto,
+    Balanced,
+}
+
+impl NeoApprovalMode {
+    pub fn cycle(&self) -> Self {
+        match self {
+            Self::Default => Self::Manual,
+            Self::Manual => Self::Auto,
+            Self::Auto => Self::Balanced,
+            Self::Balanced => Self::Default,
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Default => "Manual (org default)",
+            Self::Manual => "Manual",
+            Self::Auto => "Auto",
+            Self::Balanced => "Balanced",
+        }
+    }
+
+    /// Returns the API value to send, or None if using org default
+    pub fn api_value(&self) -> Option<&'static str> {
+        match self {
+            Self::Default => None,
+            Self::Manual => Some("manual"),
+            Self::Auto => Some("auto"),
+            Self::Balanced => Some("balanced"),
+        }
+    }
+}
+
+/// Neo task permission mode for new task creation
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum NeoPermissionMode {
+    /// Use org default (Full) — don't send the field
+    #[default]
+    Default,
+    Full,
+    ReadOnly,
+}
+
+impl NeoPermissionMode {
+    pub fn cycle(&self) -> Self {
+        match self {
+            Self::Default => Self::Full,
+            Self::Full => Self::ReadOnly,
+            Self::ReadOnly => Self::Default,
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Default => "Full (org default)",
+            Self::Full => "Full",
+            Self::ReadOnly => "Read-only",
+        }
+    }
+
+    /// Returns the API value to send, or None if using org default
+    pub fn api_value(&self) -> Option<&'static str> {
+        match self {
+            Self::Default => None,
+            Self::Full => Some("default"),
+            Self::ReadOnly => Some("read-only"),
+        }
+    }
+}
+
+/// Neo task plan mode for new task creation
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum NeoPlanMode {
+    /// Use org default (Off) — don't send the field
+    #[default]
+    Default,
+    On,
+    Off,
+}
+
+impl NeoPlanMode {
+    pub fn cycle(&self) -> Self {
+        match self {
+            Self::Default => Self::On,
+            Self::On => Self::Off,
+            Self::Off => Self::Default,
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Default => "Off (org default)",
+            Self::On => "On",
+            Self::Off => "Off",
+        }
+    }
+
+    /// Returns the API value to send, or None if using org default
+    pub fn api_value(&self) -> Option<bool> {
+        match self {
+            Self::Default => None,
+            Self::On => Some(true),
+            Self::Off => Some(false),
+        }
+    }
+}
+
+/// Settings for creating a new Neo task
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NeoTaskSettings {
+    pub approval_mode: NeoApprovalMode,
+    pub permission_mode: NeoPermissionMode,
+    pub plan_mode: NeoPlanMode,
+}
+
+impl NeoTaskSettings {
+    /// Returns true if any setting differs from org default
+    #[allow(dead_code)]
+    pub fn has_overrides(&self) -> bool {
+        self.approval_mode != NeoApprovalMode::Default
+            || self.permission_mode != NeoPermissionMode::Default
+            || self.plan_mode != NeoPlanMode::Default
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── NeoApprovalMode ──
+
+    #[test]
+    fn approval_mode_cycle_returns_to_default() {
+        let m = NeoApprovalMode::Default;
+        let m = m.cycle(); // Manual
+        let m = m.cycle(); // Auto
+        let m = m.cycle(); // Balanced
+        let m = m.cycle(); // Default
+        assert_eq!(m, NeoApprovalMode::Default);
+    }
+
+    #[test]
+    fn approval_mode_default_label_shows_value() {
+        assert_eq!(NeoApprovalMode::Default.label(), "Manual (org default)");
+    }
+
+    #[test]
+    fn approval_mode_default_api_value_is_none() {
+        assert_eq!(NeoApprovalMode::Default.api_value(), None);
+    }
+
+    #[test]
+    fn approval_mode_explicit_api_values() {
+        assert_eq!(NeoApprovalMode::Manual.api_value(), Some("manual"));
+        assert_eq!(NeoApprovalMode::Auto.api_value(), Some("auto"));
+        assert_eq!(NeoApprovalMode::Balanced.api_value(), Some("balanced"));
+    }
+
+    // ── NeoPermissionMode ──
+
+    #[test]
+    fn permission_mode_cycle_returns_to_default() {
+        let m = NeoPermissionMode::Default;
+        let m = m.cycle(); // Full
+        let m = m.cycle(); // ReadOnly
+        let m = m.cycle(); // Default
+        assert_eq!(m, NeoPermissionMode::Default);
+    }
+
+    #[test]
+    fn permission_mode_default_label_shows_value() {
+        assert_eq!(NeoPermissionMode::Default.label(), "Full (org default)");
+    }
+
+    #[test]
+    fn permission_mode_default_api_value_is_none() {
+        assert_eq!(NeoPermissionMode::Default.api_value(), None);
+    }
+
+    #[test]
+    fn permission_mode_explicit_api_values() {
+        assert_eq!(NeoPermissionMode::Full.api_value(), Some("default"));
+        assert_eq!(NeoPermissionMode::ReadOnly.api_value(), Some("read-only"));
+    }
+
+    // ── NeoPlanMode ──
+
+    #[test]
+    fn plan_mode_cycle_returns_to_default() {
+        let m = NeoPlanMode::Default;
+        let m = m.cycle(); // On
+        let m = m.cycle(); // Off
+        let m = m.cycle(); // Default
+        assert_eq!(m, NeoPlanMode::Default);
+    }
+
+    #[test]
+    fn plan_mode_default_label_shows_value() {
+        assert_eq!(NeoPlanMode::Default.label(), "Off (org default)");
+    }
+
+    #[test]
+    fn plan_mode_default_api_value_is_none() {
+        assert_eq!(NeoPlanMode::Default.api_value(), None);
+    }
+
+    #[test]
+    fn plan_mode_explicit_api_values() {
+        assert_eq!(NeoPlanMode::On.api_value(), Some(true));
+        assert_eq!(NeoPlanMode::Off.api_value(), Some(false));
+    }
+
+    // ── NeoTaskSettings ──
+
+    #[test]
+    fn settings_default_has_no_overrides() {
+        let s = NeoTaskSettings::default();
+        assert!(!s.has_overrides());
+    }
+
+    #[test]
+    fn settings_with_changed_approval_has_overrides() {
+        let mut s = NeoTaskSettings::default();
+        s.approval_mode = NeoApprovalMode::Auto;
+        assert!(s.has_overrides());
+    }
+
+    #[test]
+    fn settings_with_plan_mode_on_has_overrides() {
+        let mut s = NeoTaskSettings::default();
+        s.plan_mode = NeoPlanMode::On;
+        assert!(s.has_overrides());
+    }
+}
+
 /// Application state - holds all data fetched from APIs
 #[derive(Default)]
 pub struct AppState {

@@ -13,7 +13,7 @@ use ratatui::{
 use tui_scrollview::ScrollViewState;
 
 use crate::api::{NeoMessage, NeoMessageType, NeoTask};
-use crate::app::SlashCommandsDialogView;
+use crate::app::{NeoTaskSettings, SlashCommandsDialogView};
 use crate::components::{StatefulList, TextEditor, TextInput};
 use crate::theme::{symbols, Theme};
 
@@ -51,6 +51,12 @@ pub struct NeoViewProps<'a> {
     pub spinner_char: &'a str,
     pub hide_task_list: bool,
     pub command_picker: CommandPickerProps<'a>,
+    pub task_settings: NeoTaskSettings,
+    pub show_settings: bool,
+    /// Whether the current (already created) task has plan mode enabled
+    pub current_task_plan_mode: bool,
+    /// Whether a task is currently loaded (current_task_id is Some)
+    pub has_loaded_task: bool,
 }
 
 /// Props for chat view (internal)
@@ -62,6 +68,10 @@ struct ChatViewProps<'a> {
     is_loading: bool,
     spinner_char: &'a str,
     command_picker: CommandPickerProps<'a>,
+    task_settings: NeoTaskSettings,
+    show_settings: bool,
+    current_task_plan_mode: bool,
+    has_loaded_task: bool,
 }
 
 /// Render the Neo chat view
@@ -74,6 +84,10 @@ pub fn render_neo_view(frame: &mut Frame, theme: &Theme, area: Rect, props: NeoV
         is_loading: props.is_loading,
         spinner_char: props.spinner_char,
         command_picker: props.command_picker,
+        task_settings: props.task_settings,
+        show_settings: props.show_settings,
+        current_task_plan_mode: props.current_task_plan_mode,
+        has_loaded_task: props.has_loaded_task,
     };
 
     if props.hide_task_list {
@@ -168,8 +182,10 @@ fn render_tasks_list(
 const COMMAND_ICON: &str = "⌘";
 
 fn render_chat_view(frame: &mut Frame, theme: &Theme, area: Rect, props: ChatViewProps<'_>) {
-    // Layout: messages area, thinking indicator (if loading), command picker (if showing), input area
+    // Layout: messages area, thinking indicator (if loading), settings bar (if new task),
+    // command picker (if showing), input area
     let thinking_height = if props.is_loading { 2 } else { 0 };
+    let settings_height: u16 = if props.show_settings { 1 } else { 0 };
     let command_picker_height = if props.command_picker.show {
         // Show up to 8 commands + 2 for borders
         (props.command_picker.filtered_commands.len().min(8) + 2) as u16
@@ -182,30 +198,52 @@ fn render_chat_view(frame: &mut Frame, theme: &Theme, area: Rect, props: ChatVie
         .constraints([
             Constraint::Min(10),
             Constraint::Length(thinking_height),
+            Constraint::Length(settings_height),
             Constraint::Length(command_picker_height),
             Constraint::Length(3),
         ])
         .split(area);
 
+    // Plan mode visual indicator — active during composition OR for an existing plan-mode task
+    let plan_mode_active = props.current_task_plan_mode
+        || (props.show_settings && props.task_settings.plan_mode == crate::app::NeoPlanMode::On);
+
     // Messages area
-    let messages_block = Block::default()
+    let mut messages_block = Block::default()
         .borders(Borders::ALL)
-        .border_style(if props.input.is_focused() {
+        .border_style(if plan_mode_active {
+            theme.warning()
+        } else if props.input.is_focused() {
             theme.border()
         } else {
             theme.border_focused()
         })
-        .title(" Chat ")
-        .title_style(theme.subtitle());
+        .title(if plan_mode_active {
+            " Chat [PLAN] "
+        } else {
+            " Chat "
+        })
+        .title_style(if plan_mode_active {
+            theme.warning()
+        } else {
+            theme.subtitle()
+        });
+
+    if plan_mode_active {
+        messages_block =
+            messages_block.border_type(ratatui::widgets::BorderType::LightDoubleDashed);
+    }
 
     let messages_inner = messages_block.inner(chunks[0]);
     frame.render_widget(messages_block, chunks[0]);
 
     if props.messages.is_empty() {
-        // Show welcome message or loading indicator
         if props.is_loading {
             // Just show empty area while loading - the thinking indicator below will show
+        } else if props.has_loaded_task {
+            // Task is loaded but has no messages yet — shouldn't normally happen
         } else {
+            // No task loaded — show welcome or "press Enter" hint
             let welcome_lines = vec![
                 Line::from(""),
                 Line::from(vec![
@@ -462,12 +500,17 @@ fn render_chat_view(frame: &mut Frame, theme: &Theme, area: Rect, props: ChatVie
         frame.render_widget(thinking_para, chunks[1]);
     }
 
+    // Task settings bar (shown when composing a new task)
+    if props.show_settings {
+        render_task_settings_bar(frame, theme, chunks[2], &props.task_settings);
+    }
+
     // Slash command picker (shown above input when typing '/')
     if props.command_picker.show && !props.command_picker.filtered_commands.is_empty() {
         render_command_picker(
             frame,
             theme,
-            chunks[2],
+            chunks[3],
             props.command_picker.filtered_commands,
             props.command_picker.index,
         );
@@ -489,22 +532,30 @@ fn render_chat_view(frame: &mut Frame, theme: &Theme, area: Rect, props: ChatVie
     };
 
     // Input area
-    let input_block = Block::default()
+    let mut input_block = Block::default()
         .borders(Borders::ALL)
-        .border_style(if props.input.is_focused() {
+        .border_style(if plan_mode_active {
+            theme.warning()
+        } else if props.input.is_focused() {
             theme.border_focused()
         } else {
             theme.border()
         })
         .title(input_title)
-        .title_style(if props.input.is_focused() {
+        .title_style(if plan_mode_active {
+            theme.warning()
+        } else if props.input.is_focused() {
             theme.primary()
         } else {
             theme.subtitle()
         });
 
-    let input_inner = input_block.inner(chunks[3]);
-    frame.render_widget(input_block, chunks[3]);
+    if plan_mode_active {
+        input_block = input_block.border_type(ratatui::widgets::BorderType::LightDoubleDashed);
+    }
+
+    let input_inner = input_block.inner(chunks[4]);
+    frame.render_widget(input_block, chunks[4]);
 
     // Input text with cursor - highlight slash commands with purple background
     let input_value = props.input.value();
@@ -659,6 +710,61 @@ fn render_input_with_commands_unfocused<'a>(
     spans
 }
 
+/// Render the task settings bar (approval, permission, plan mode)
+fn render_task_settings_bar(
+    frame: &mut Frame,
+    theme: &Theme,
+    area: Rect,
+    settings: &NeoTaskSettings,
+) {
+    use crate::app::{NeoApprovalMode, NeoPermissionMode, NeoPlanMode};
+
+    let mut spans: Vec<Span> = vec![Span::styled(" ", theme.text_muted())];
+
+    // Approval mode
+    spans.push(Span::styled("Approval ", theme.text_muted()));
+    let approval_style = if settings.approval_mode != NeoApprovalMode::Default {
+        theme.accent().add_modifier(Modifier::BOLD)
+    } else {
+        theme.text_secondary()
+    };
+    spans.push(Span::styled(settings.approval_mode.label(), approval_style));
+    spans.push(Span::styled(" (", theme.text_muted()));
+    spans.push(Span::styled("a", theme.key_hint()));
+    spans.push(Span::styled(")  ", theme.text_muted()));
+
+    // Permission mode
+    spans.push(Span::styled("Permission ", theme.text_muted()));
+    let permission_style = if settings.permission_mode != NeoPermissionMode::Default {
+        theme.accent().add_modifier(Modifier::BOLD)
+    } else {
+        theme.text_secondary()
+    };
+    spans.push(Span::styled(
+        settings.permission_mode.label(),
+        permission_style,
+    ));
+    spans.push(Span::styled(" (", theme.text_muted()));
+    spans.push(Span::styled("p", theme.key_hint()));
+    spans.push(Span::styled(")  ", theme.text_muted()));
+
+    // Plan mode — extra visual emphasis when active
+    spans.push(Span::styled("Plan ", theme.text_muted()));
+    let plan_style = if settings.plan_mode == NeoPlanMode::On {
+        theme.warning().add_modifier(Modifier::BOLD)
+    } else {
+        theme.text_secondary()
+    };
+    spans.push(Span::styled(settings.plan_mode.label(), plan_style));
+    spans.push(Span::styled(" (", theme.text_muted()));
+    spans.push(Span::styled("m", theme.key_hint()));
+    spans.push(Span::styled(")", theme.text_muted()));
+
+    let line = Line::from(spans);
+    let para = Paragraph::new(line).style(Style::default().bg(theme.bg_medium));
+    frame.render_widget(para, area);
+}
+
 /// Render the slash command picker popup
 fn render_command_picker(
     frame: &mut Frame,
@@ -777,6 +883,29 @@ pub fn render_neo_details_dialog(frame: &mut Frame, theme: &Theme, task: &NeoTas
         Span::styled(format!("  {} ", STATUS_ICON), status_style),
         Span::styled(status, status_style),
     ]));
+
+    // Mode section
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        " Mode",
+        theme.subtitle().add_modifier(Modifier::BOLD),
+    )));
+    lines.push(Line::from(Span::styled(
+        " ─".repeat(18),
+        theme.text_muted(),
+    )));
+
+    if task.plan_mode == Some(true) {
+        lines.push(Line::from(vec![
+            Span::styled("  📋 ", theme.warning()),
+            Span::styled("Plan mode", theme.warning().add_modifier(Modifier::BOLD)),
+        ]));
+    } else {
+        lines.push(Line::from(vec![
+            Span::styled("  ⚡ ", theme.text_secondary()),
+            Span::styled("Execute mode", theme.text()),
+        ]));
+    }
 
     // Started on section
     lines.push(Line::from(""));

@@ -11,11 +11,11 @@ Central state machine managing UI state, data, and event loop. Implements TEA pa
 
 | File | ~Lines | Purpose |
 |------|--------|---------|
-| `mod.rs` | ~530 | App struct, new(), run(), render() |
-| `types.rs` | ~205 | Model: Tab, FocusMode, AppState |
-| `handlers.rs` | ~615 | Update: All keyboard event handlers |
-| `data.rs` | ~305 | Data loading & refresh logic |
-| `neo.rs` | ~270 | Neo AI agent async operations |
+| `mod.rs` | ~880 | App struct, new(), run(), render() |
+| `types.rs` | ~470 | Model: Tab, FocusMode, NeoTaskSettings, AppState |
+| `handlers.rs` | ~650 | Update: All keyboard event handlers |
+| `data.rs` | ~420 | Data loading & refresh logic |
+| `neo.rs` | ~440 | Neo AI agent async operations |
 
 ## TEA Implementation
 
@@ -30,8 +30,14 @@ Central state machine managing UI state, data, and event loop. Implements TEA pa
 enum Tab { Dashboard, Commands, Neo, Stacks, Esc, Platform }
 enum FocusMode { Normal, Input }
 enum PlatformView { Services, PrivateComponents, Registry, Templates }
+enum NeoApprovalMode { Default, Manual, Auto, Balanced }
+enum NeoPermissionMode { Default, Full, ReadOnly }
+enum NeoPlanMode { Default, On, Off }
+struct NeoTaskSettings { approval_mode, permission_mode, plan_mode }
 struct AppState { stacks, environments, neo_tasks, resources, ... }
 ```
+
+`NeoApprovalMode`, `NeoPermissionMode`, `NeoPlanMode` each have `cycle()`, `label()`, and `api_value()` methods. The `Default` variant shows the actual value (e.g., "Manual (org default)") and returns `None` for `api_value()` so the field is omitted from the API request.
 
 ## Event Handlers (handlers.rs)
 
@@ -56,6 +62,8 @@ struct AppState { stacks, environments, neo_tasks, resources, ... }
 | `neo_show_command_picker` | `bool` | Show slash command picker popup |
 | `neo_filtered_commands` | `Vec<NeoSlashCommand>` | Filtered commands for picker |
 | `neo_command_picker_index` | `usize` | Selected command in picker |
+| `neo_task_settings` | `NeoTaskSettings` | Settings for new task creation (approval/permission/plan) |
+| `neo_hide_task_list` | `bool` | Hide task list for full-width chat |
 
 ## Neo Polling Mechanism
 
@@ -75,6 +83,9 @@ struct AppState { stacks, environments, neo_tasks, resources, ... }
 | `j/k` | Scroll 3 lines |
 | `J/K` | Page scroll |
 | `g/G` | Jump to top/bottom |
+| `a` | Cycle approval mode (new task only) |
+| `p` | Cycle permission mode (new task only) |
+| `m` | Cycle plan mode (new task only) |
 | `Enter` | Load selected task |
 | `Esc` | Show task list |
 

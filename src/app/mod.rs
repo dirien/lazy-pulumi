@@ -12,8 +12,8 @@ mod neo;
 mod types;
 
 pub use types::{
-    AppState, DataLoadResult, EscPane, FocusMode, NeoAsyncResult, PlatformView,
-    SlashCommandsDialogView, Tab,
+    AppState, DataLoadResult, EscPane, FocusMode, NeoApprovalMode, NeoAsyncResult,
+    NeoPermissionMode, NeoPlanMode, NeoTaskSettings, PlatformView, SlashCommandsDialogView, Tab,
 };
 
 use color_eyre::Result;
@@ -167,6 +167,8 @@ pub struct App {
     pub(super) neo_command_picker_index: usize,
     /// Pending slash commands that have been inserted but not yet sent
     pub(super) neo_pending_commands: Vec<crate::api::NeoSlashCommand>,
+    /// Settings for new task creation (approval, permission, plan mode)
+    pub(super) neo_task_settings: types::NeoTaskSettings,
 
     // Slash commands management dialog state
     /// Show slash commands management dialog
@@ -339,6 +341,7 @@ impl App {
             neo_filtered_commands: Vec::new(),
             neo_command_picker_index: 0,
             neo_pending_commands: Vec::new(),
+            neo_task_settings: types::NeoTaskSettings::default(),
             // Slash commands management dialog
             show_slash_commands_dialog: false,
             slash_commands_dialog_view: SlashCommandsDialogView::default(),
@@ -512,6 +515,17 @@ impl App {
         let neo_filtered_commands = &self.neo_filtered_commands;
         let neo_command_picker_index = self.neo_command_picker_index;
         let neo_pending_commands = &self.neo_pending_commands;
+        let neo_task_settings = self.neo_task_settings;
+        // Show settings bar only when composing a new task (no current task)
+        let neo_show_settings = self.state.current_task_id.is_none() && self.neo_hide_task_list;
+        // Check if the current task has plan mode enabled (persists after creation)
+        let neo_current_task_plan_mode = self
+            .state
+            .current_task_id
+            .as_ref()
+            .and_then(|tid| self.state.neo_tasks.iter().find(|t| &t.id == tid))
+            .and_then(|t| t.plan_mode)
+            .unwrap_or(false);
 
         // Slash commands dialog state
         let slash_commands_list = &mut self.slash_commands_list;
@@ -636,6 +650,10 @@ impl App {
                                 all_commands: &state.neo_slash_commands,
                                 pending_commands: neo_pending_commands,
                             },
+                            task_settings: neo_task_settings,
+                            show_settings: neo_show_settings,
+                            current_task_plan_mode: neo_current_task_plan_mode,
+                            has_loaded_task: state.current_task_id.is_some(),
                         },
                     );
                 }
@@ -736,7 +754,7 @@ impl App {
 
             // Loading overlay
             if is_loading && tab != Tab::Neo {
-                ui::render_loading(frame, theme, spinner_message, spinner_char);
+                ui::render_loading(frame, theme, content_area, spinner_message, spinner_char);
             }
         })?;
 
@@ -793,7 +811,16 @@ impl App {
         }
 
         match self.focus {
-            FocusMode::Input => "Enter: send | Esc: cancel".to_string(),
+            FocusMode::Input => {
+                if self.tab == Tab::Neo
+                    && self.state.current_task_id.is_none()
+                    && self.neo_hide_task_list
+                {
+                    "Enter: send | Esc: cancel | In Normal: a/p/m: settings".to_string()
+                } else {
+                    "Enter: send | Esc: cancel".to_string()
+                }
+            }
             FocusMode::Normal => match self.tab {
                 Tab::Dashboard => {
                     "Tab: switch | o: org | l: logs | ?: help | r: refresh | q: quit".to_string()

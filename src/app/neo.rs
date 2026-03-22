@@ -48,6 +48,7 @@ impl App {
                             linked_prs: Vec::new(),
                             entities: Vec::new(),
                             policies: Vec::new(),
+                            plan_mode: self.neo_task_settings.plan_mode.api_value(),
                         };
                         self.state.neo_tasks.insert(0, new_task);
                         self.neo_tasks_list.set_items(self.state.neo_tasks.clone());
@@ -204,6 +205,9 @@ impl App {
         // Take pending commands (they'll be sent with this message)
         let pending_commands = std::mem::take(&mut self.neo_pending_commands);
 
+        // Capture task settings for new tasks
+        let task_settings = self.neo_task_settings;
+
         // Add user message to chat immediately
         self.state.neo_messages.push(NeoMessage {
             role: "user".to_string(),
@@ -232,7 +236,7 @@ impl App {
 
                 tokio::spawn(async move {
                     let result = if let Some(tid) = task_id {
-                        // Continue existing task
+                        // Continue existing task (settings only apply at creation)
                         if !pending_commands.is_empty() {
                             // With slash commands
                             client
@@ -248,13 +252,28 @@ impl App {
                             client.continue_neo_task(&org, &tid, Some(&message)).await
                         }
                     } else if !pending_commands.is_empty() {
-                        // Create new task with slash commands
+                        // Create new task with slash commands and settings
                         client
-                            .create_neo_task_with_commands(&org, &message, &pending_commands)
+                            .create_neo_task_with_commands(
+                                &org,
+                                &message,
+                                &pending_commands,
+                                task_settings.approval_mode.api_value(),
+                                task_settings.permission_mode.api_value(),
+                                task_settings.plan_mode.api_value(),
+                            )
                             .await
                     } else {
-                        // Create new task (plain message)
-                        client.create_neo_task(&org, &message).await
+                        // Create new task with settings
+                        client
+                            .create_neo_task(
+                                &org,
+                                &message,
+                                task_settings.approval_mode.api_value(),
+                                task_settings.permission_mode.api_value(),
+                                task_settings.plan_mode.api_value(),
+                            )
+                            .await
                     };
 
                     match result {

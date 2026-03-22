@@ -339,14 +339,6 @@ fn patch_nullable_fields(schemas: &mut serde_json::Map<String, serde_json::Value
     // are no more pages, but the spec marks it as required.
     remove_required(schemas, "ListServicesResponse", "continuationToken");
     set_nullable(schemas, "ListServicesResponse", "continuationToken");
-
-    // PackageParameterization.parameter — spec says array of byte strings,
-    // but the API returns a plain base64 string.
-    set_property_type_string(schemas, "PackageParameterization", "parameter");
-
-    // TemplateRuntimeInfo.options — spec says additionalProperties: { type: object },
-    // but the API returns simple string values like "npm". Allow any JSON value.
-    set_additional_properties_any(schemas, "TemplateRuntimeInfo", "options");
 }
 
 /// Helper: remove a field from a schema's `required` array.
@@ -382,6 +374,7 @@ fn set_nullable(
 /// Helper: replace a property's schema with `{ "type": "string" }`.
 ///
 /// Used when the spec declares an array/object but the API returns a plain string.
+#[allow(dead_code)]
 fn set_property_type_string(
     schemas: &mut serde_json::Map<String, serde_json::Value>,
     schema_name: &str,
@@ -402,6 +395,7 @@ fn set_property_type_string(
 /// Helper: change a property's `additionalProperties` to `{}` (accept any value).
 ///
 /// Used when the spec constrains values to `object` but the API returns strings.
+#[allow(dead_code)]
 fn set_additional_properties_any(
     schemas: &mut serde_json::Map<String, serde_json::Value>,
     schema_name: &str,

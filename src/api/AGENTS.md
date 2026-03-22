@@ -41,6 +41,11 @@ Field names: uses `created`/`modified` (NOT `createdAt`/`modifiedAt`)
 - `GET /api/preview/agents/{org}/tasks/{taskId}/events` — Get events
 - `POST /api/preview/agents/{org}/tasks/{taskId}` — Send user event (message, confirmation, cancel)
 
+**Task Creation Options** (POST body):
+- `approvalMode` (string, optional): `"manual"`, `"auto"`, or `"balanced"` — omit for org default
+- `permissionMode` (string, optional): `"default"` or `"read-only"` — omit for org default
+- `planMode` (boolean, optional): `true` or `false` — omit for org default
+
 **Task Status**: `"running"` or `"idle"`
 
 **Task Sharing**: `PATCH` with `{ "isShared": true }`

@@ -619,12 +619,32 @@ impl App {
             self.neo_scroll_state = ScrollViewState::default();
             self.neo_auto_scroll.store(true, Ordering::Relaxed);
             self.neo_hide_task_list = true; // Hide task list for new conversation
+            self.neo_task_settings = super::types::NeoTaskSettings::default();
             self.focus = FocusMode::Input;
             self.neo_input.set_focused(true);
+        } else if keys::is_char(&key, 'a')
+            && self.neo_hide_task_list
+            && self.state.current_task_id.is_none()
+        {
+            // Cycle approval mode (only when composing new task)
+            self.neo_task_settings.approval_mode = self.neo_task_settings.approval_mode.cycle();
+        } else if keys::is_char(&key, 'p')
+            && self.neo_hide_task_list
+            && self.state.current_task_id.is_none()
+        {
+            // Cycle permission mode (only when composing new task)
+            self.neo_task_settings.permission_mode = self.neo_task_settings.permission_mode.cycle();
+        } else if keys::is_char(&key, 'm')
+            && self.neo_hide_task_list
+            && self.state.current_task_id.is_none()
+        {
+            // Cycle plan mode (only when composing new task)
+            self.neo_task_settings.plan_mode = self.neo_task_settings.plan_mode.cycle();
         } else if keys::is_up(&key) {
             if !self.neo_hide_task_list {
                 // Navigate task list when visible
                 self.neo_tasks_list.previous();
+                self.load_selected_task().await;
             } else {
                 // Scroll chat up when in full-width mode
                 for _ in 0..3 {
@@ -636,6 +656,7 @@ impl App {
             if !self.neo_hide_task_list {
                 // Navigate task list when visible
                 self.neo_tasks_list.next();
+                self.load_selected_task().await;
             } else {
                 // Scroll chat down when in full-width mode
                 for _ in 0..3 {
