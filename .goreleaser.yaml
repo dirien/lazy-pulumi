@@ -50,7 +50,7 @@ archives:
 checksum:
   name_template: 'checksums.txt'
 
-brews:
+homebrew_casks:
   - name: lazy-pulumi
     repository:
       owner: dirien
@@ -61,12 +61,16 @@ brews:
       name: dirien
       email: engin.diri@mail.schwarz
 
-    directory: Formula
+    directory: Casks
     homepage: "https://github.com/dirien/lazy-pulumi"
     description: "A stylish TUI for Pulumi Cloud, ESC, and NEO"
-    license: "MIT"
-    install: |
-      bin.install "lazy-pulumi"
+
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/lazy-pulumi"]
+          end
 
 changelog:
   sort: asc
