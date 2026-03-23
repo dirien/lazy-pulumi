@@ -38,11 +38,11 @@ export PULUMI_API_URL="https://api.pulumi.com"
 
 ## Installation
 
-### Homebrew (macOS/Linux)
+### Homebrew (macOS)
 
 ```bash
 brew tap dirien/dirien
-brew install lazy-pulumi
+brew install --cask lazy-pulumi
 ```
 
 ### From Source
@@ -69,13 +69,7 @@ Download the latest binary from the [GitHub Releases](https://github.com/dirien/
 To update to the latest version via Homebrew:
 
 ```bash
-brew update && brew upgrade lazy-pulumi
-```
-
-Or update all Homebrew packages including lazy-pulumi:
-
-```bash
-brew update && brew upgrade
+brew update && brew upgrade --cask lazy-pulumi
 ```
 
 ## Logging
