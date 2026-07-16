@@ -478,25 +478,6 @@ pub struct NeoSlashCommandPayload {
     pub tag: String,
 }
 
-/// Pulumi Resource
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Resource {
-    #[serde(rename = "type")]
-    pub resource_type: String,
-    pub name: String,
-    #[serde(default)]
-    pub id: Option<String>,
-    #[serde(default)]
-    pub stack: Option<String>,
-    #[serde(default)]
-    pub project: Option<String>,
-    #[serde(default)]
-    pub package: Option<String>,
-    #[serde(default)]
-    pub modified: Option<String>,
-}
-
 /// Policy violation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

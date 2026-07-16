@@ -600,7 +600,7 @@ impl App {
             // Content based on current tab
             match tab {
                 Tab::Dashboard => {
-                    ui::render_dashboard(frame, theme, content_area, state);
+                    ui::render_dashboard(frame, theme, content_area, state, spinner_char);
                 }
                 Tab::Stacks => {
                     ui::render_stacks_view(

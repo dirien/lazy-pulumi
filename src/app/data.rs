@@ -92,6 +92,12 @@ impl App {
             self.is_loading = true;
             self.spinner.set_message("Loading data...");
 
+            // Mark dashboard tiles as loading until their data arrives
+            self.state.resource_count = None;
+            self.state.stacks_loading = true;
+            self.state.envs_loading = true;
+            self.state.neo_tasks_loading = true;
+
             // Spawn all data loads in parallel
             let client1 = client.clone();
             let org1 = org.clone();
@@ -141,9 +147,9 @@ impl App {
             let org4 = org.clone();
             let tx4 = tx.clone();
             tokio::spawn(async move {
-                match client4.search_resources(org4.as_deref(), "").await {
-                    Ok(resources) => {
-                        let _ = tx4.send(DataLoadResult::Resources(resources)).await;
+                match client4.count_resources(org4.as_deref()).await {
+                    Ok(count) => {
+                        let _ = tx4.send(DataLoadResult::ResourceCount(count)).await;
                     }
                     Err(e) => {
                         let _ = tx4
@@ -292,15 +298,18 @@ impl App {
 
             match result {
                 DataLoadResult::Stacks(stacks) => {
+                    self.state.stacks_loading = false;
                     self.state.stacks = stacks.clone();
                     self.stacks_list.set_items(stacks);
                 }
                 DataLoadResult::EscEnvironments(envs) => {
                     log::info!("Received {} ESC environments", envs.len());
+                    self.state.envs_loading = false;
                     self.state.esc_environments = envs.clone();
                     self.esc_list.set_items(envs);
                 }
                 DataLoadResult::NeoTasks(tasks) => {
+                    self.state.neo_tasks_loading = false;
                     let should_auto_load = !tasks.is_empty()
                         && self.state.current_task_id.is_none()
                         && self.state.neo_tasks.is_empty();
@@ -340,8 +349,8 @@ impl App {
                     log::info!("Received {} Neo slash commands", commands.len());
                     self.state.neo_slash_commands = commands;
                 }
-                DataLoadResult::Resources(resources) => {
-                    self.state.resources = resources;
+                DataLoadResult::ResourceCount(count) => {
+                    self.state.resource_count = Some(count);
                 }
                 DataLoadResult::Services(services) => {
                     log::info!("Received {} services", services.len());
@@ -399,6 +408,11 @@ impl App {
             // Clear loading state when all loads complete
             if self.pending_data_loads == 0 {
                 self.is_loading = false;
+                // Stop tile spinners even if a load errored out
+                self.state.stacks_loading = false;
+                self.state.envs_loading = false;
+                self.state.neo_tasks_loading = false;
+                self.state.resource_count.get_or_insert(0);
                 // Note: splash screen is now dismissed via user interaction, not auto-hide
             }
         }

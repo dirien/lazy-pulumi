@@ -112,20 +112,6 @@ impl From<gen::AgentSlashCommand> for domain::NeoSlashCommand {
 // Resource conversions
 // ─────────────────────────────────────────────────────────────
 
-impl From<gen::ResourceResult> for domain::Resource {
-    fn from(r: gen::ResourceResult) -> Self {
-        Self {
-            resource_type: r.type_.unwrap_or_default(),
-            name: r.name.unwrap_or_default(),
-            id: r.id,
-            stack: r.stack,
-            project: r.project,
-            package: Some(r.package),
-            modified: r.modified,
-        }
-    }
-}
-
 impl From<gen::ResourceCountSummary> for domain::ResourceSummaryPoint {
     fn from(r: gen::ResourceCountSummary) -> Self {
         Self {
@@ -639,68 +625,6 @@ mod tests {
 
         let modified = neo_cmd.modified_at.expect("should have modified_at");
         assert!(modified.contains('T'), "should be RFC 3339: {modified}");
-    }
-
-    // ═════════════════════════════════════════════════════════════
-    // Resource conversion tests
-    // ═════════════════════════════════════════════════════════════
-
-    #[test]
-    fn resource_conversion_maps_all_fields() {
-        let gen_resource: gen::ResourceResult = gen::ResourceResult::builder()
-            .type_(Some("aws:s3:Bucket".to_string()))
-            .name(Some("my-bucket".to_string()))
-            .id(Some("bucket-123".to_string()))
-            .stack(Some("dev".to_string()))
-            .project(Some("my-project".to_string()))
-            .package("aws")
-            .module("s3")
-            .modified(Some("2024-01-15".to_string()))
-            .try_into()
-            .expect("valid ResourceResult");
-
-        let resource: domain::Resource = gen_resource.into();
-
-        assert_eq!(resource.resource_type, "aws:s3:Bucket");
-        assert_eq!(resource.name, "my-bucket");
-        assert_eq!(resource.id, Some("bucket-123".to_string()));
-        assert_eq!(resource.stack, Some("dev".to_string()));
-        assert_eq!(resource.project, Some("my-project".to_string()));
-        assert_eq!(resource.package, Some("aws".to_string()));
-        assert_eq!(resource.modified, Some("2024-01-15".to_string()));
-    }
-
-    #[test]
-    fn resource_conversion_none_type_defaults_to_empty() {
-        let gen_resource: gen::ResourceResult = gen::ResourceResult::builder()
-            .package("pkg")
-            .module("mod")
-            .try_into()
-            .expect("valid ResourceResult");
-
-        let resource: domain::Resource = gen_resource.into();
-
-        assert_eq!(
-            resource.resource_type, "",
-            "None type_ should default to empty string"
-        );
-        assert_eq!(
-            resource.name, "",
-            "None name should default to empty string"
-        );
-    }
-
-    #[test]
-    fn resource_conversion_package_always_wrapped_in_some() {
-        let gen_resource: gen::ResourceResult = gen::ResourceResult::builder()
-            .package("pulumi")
-            .module("mod")
-            .try_into()
-            .expect("valid ResourceResult");
-
-        let resource: domain::Resource = gen_resource.into();
-
-        assert_eq!(resource.package, Some("pulumi".to_string()));
     }
 
     // ═════════════════════════════════════════════════════════════

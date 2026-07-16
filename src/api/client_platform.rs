@@ -2,8 +2,7 @@
 
 use super::client::{map_gen_err, strip_frontmatter, ApiError, PulumiClient};
 use super::domain::{
-    RegistryPackage, RegistryTemplate, Resource, ResourceSummaryPoint, Service, TemplateRuntime,
-    User,
+    RegistryPackage, RegistryTemplate, ResourceSummaryPoint, Service, TemplateRuntime, User,
 };
 
 impl PulumiClient {
@@ -11,53 +10,25 @@ impl PulumiClient {
     // Resource Search API (via generated client)
     // ─────────────────────────────────────────────────────────────
 
-    /// Search resources (with pagination)
-    pub async fn search_resources(
-        &self,
-        org: Option<&str>,
-        query: &str,
-    ) -> Result<Vec<Resource>, ApiError> {
+    /// Total number of resources in the organization.
+    ///
+    /// Uses the search endpoint's `total` field with a single 1-item page,
+    /// so the count is exact and cheap even for orgs with 100k+ resources.
+    pub async fn count_resources(&self, org: Option<&str>) -> Result<i64, ApiError> {
         let org = self.org_or_default(org)?;
 
-        let mut all_resources = Vec::new();
-        let mut page: i64 = 1;
-        let page_size: i64 = 100;
+        let resp = self
+            .gen
+            .get_org_resource_search_v2_query()
+            .org_name(org)
+            .query("")
+            .page(1)
+            .size(1)
+            .send()
+            .await
+            .map_err(map_gen_err)?;
 
-        loop {
-            let resp = self
-                .gen
-                .get_org_resource_search_v2_query()
-                .org_name(org)
-                .query(query)
-                .page(page)
-                .size(page_size)
-                .send()
-                .await
-                .map_err(map_gen_err)?;
-
-            let data = resp.into_inner();
-            let fetched_count = data.resources.len();
-            let resources: Vec<Resource> = data.resources.into_iter().map(Into::into).collect();
-            all_resources.extend(resources);
-
-            let has_next = data
-                .pagination
-                .as_ref()
-                .and_then(|p| p.next.as_ref())
-                .is_some();
-
-            if !has_next || fetched_count < page_size as usize {
-                break;
-            }
-
-            page += 1;
-
-            if page > 100 {
-                break;
-            }
-        }
-
-        Ok(all_resources)
+        Ok(resp.into_inner().total.unwrap_or(0))
     }
 
     // ─────────────────────────────────────────────────────────────

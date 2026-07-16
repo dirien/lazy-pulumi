@@ -5,7 +5,7 @@
 
 use crate::api::{
     EscEnvironmentSummary, NeoMessage, NeoSlashCommand, NeoTask, OrgStackUpdate, RegistryPackage,
-    RegistryTemplate, Resource, ResourceSummaryPoint, Service, Stack,
+    RegistryTemplate, ResourceSummaryPoint, Service, Stack,
 };
 
 /// Async data loading result
@@ -15,7 +15,8 @@ pub enum DataLoadResult {
     EscEnvironments(Vec<EscEnvironmentSummary>),
     NeoTasks(Vec<NeoTask>),
     NeoSlashCommands(Vec<NeoSlashCommand>),
-    Resources(Vec<Resource>),
+    /// Total resource count for the dashboard tile
+    ResourceCount(i64),
     Services(Vec<Service>),
     PrivatePackages(Vec<RegistryPackage>),
     RegistryPackages(Vec<RegistryPackage>),
@@ -475,7 +476,12 @@ pub struct AppState {
     pub stacks: Vec<Stack>,
     pub esc_environments: Vec<EscEnvironmentSummary>,
     pub neo_tasks: Vec<NeoTask>,
-    pub resources: Vec<Resource>,
+    /// Total resource count (None while loading)
+    pub resource_count: Option<i64>,
+    /// Per-tile loading markers for the dashboard (set while a refresh is in flight)
+    pub stacks_loading: bool,
+    pub envs_loading: bool,
+    pub neo_tasks_loading: bool,
     /// Recent stack updates across the organization (for dashboard)
     pub recent_updates: Vec<OrgStackUpdate>,
     /// Resource count over time (for dashboard chart)
