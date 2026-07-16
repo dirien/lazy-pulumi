@@ -49,7 +49,13 @@ fn format_time_ago(timestamp: i64) -> String {
 }
 
 /// Render the dashboard view
-pub fn render_dashboard(frame: &mut Frame, theme: &Theme, area: Rect, state: &AppState) {
+pub fn render_dashboard(
+    frame: &mut Frame,
+    theme: &Theme,
+    area: Rect,
+    state: &AppState,
+    spinner_char: &str,
+) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -58,11 +64,17 @@ pub fn render_dashboard(frame: &mut Frame, theme: &Theme, area: Rect, state: &Ap
         ])
         .split(area);
 
-    render_stats_cards(frame, theme, chunks[0], state);
+    render_stats_cards(frame, theme, chunks[0], state, spinner_char);
     render_recent_activity(frame, theme, chunks[1], state);
 }
 
-fn render_stats_cards(frame: &mut Frame, theme: &Theme, area: Rect, state: &AppState) {
+fn render_stats_cards(
+    frame: &mut Frame,
+    theme: &Theme,
+    area: Rect,
+    state: &AppState,
+    spinner_char: &str,
+) {
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
@@ -74,60 +86,66 @@ fn render_stats_cards(frame: &mut Frame, theme: &Theme, area: Rect, state: &AppS
         .split(area);
 
     // Stacks card
-    let stacks_count = state.stacks.len();
+    let stacks_count = (!state.stacks_loading).then(|| state.stacks.len().to_string());
     render_stat_card(
         frame,
         theme,
         chunks[0],
         "Stacks",
-        &stacks_count.to_string(),
+        stacks_count.as_deref(),
+        spinner_char,
         symbols::DIAMOND,
         theme.primary,
     );
 
     // ESC Environments card
-    let env_count = state.esc_environments.len();
+    let env_count = (!state.envs_loading).then(|| state.esc_environments.len().to_string());
     render_stat_card(
         frame,
         theme,
         chunks[1],
         "Environments",
-        &env_count.to_string(),
+        env_count.as_deref(),
+        spinner_char,
         symbols::STAR,
         theme.secondary,
     );
 
     // Neo Tasks card
-    let neo_count = state.neo_tasks.len();
+    let neo_count = (!state.neo_tasks_loading).then(|| state.neo_tasks.len().to_string());
     render_stat_card(
         frame,
         theme,
         chunks[2],
         "Neo Tasks",
-        &neo_count.to_string(),
+        neo_count.as_deref(),
+        spinner_char,
         symbols::BULLET,
         theme.accent,
     );
 
     // Resources card
-    let resource_count = state.resources.len();
+    let resource_count = state.resource_count.map(|n| n.to_string());
     render_stat_card(
         frame,
         theme,
         chunks[3],
         "Resources",
-        &resource_count.to_string(),
+        resource_count.as_deref(),
+        spinner_char,
         symbols::CHECK,
         theme.success,
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_stat_card(
     frame: &mut Frame,
     theme: &Theme,
     area: Rect,
     title: &str,
-    value: &str,
+    value: Option<&str>,
+    spinner_char: &str,
     _icon: &str,
     accent_color: Color,
 ) {
@@ -139,6 +157,24 @@ fn render_stat_card(
 
     let inner = block.inner(area);
     frame.render_widget(block, area);
+
+    // Still loading — show a spinner instead of a stale/empty number
+    let Some(value) = value else {
+        let vertical_padding = inner.height.saturating_sub(1) / 2;
+        let centered_area = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(vertical_padding),
+                Constraint::Length(1),
+                Constraint::Min(0),
+            ])
+            .split(inner)[1];
+        let paragraph = Paragraph::new(format!("{} loading...", spinner_char))
+            .style(theme.text_muted())
+            .alignment(Alignment::Center);
+        frame.render_widget(paragraph, centered_area);
+        return;
+    };
 
     // BigText with Quadrant pixel size is 4 rows tall
     let big_text_height = 4_u16;

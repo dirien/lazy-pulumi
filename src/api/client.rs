@@ -489,6 +489,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn integration_count_resources() {
+        let Some(client) = integration_client() else {
+            eprintln!("Skipping integration test: no PULUMI_ACCESS_TOKEN");
+            return;
+        };
+
+        match client.count_resources(None).await {
+            Ok(count) => {
+                eprintln!("integration_count_resources: {} resources", count);
+                assert!(count >= 0, "count should be non-negative");
+            }
+            Err(ApiError::Parse(msg)) if msg.contains("No organization") => {
+                eprintln!("Skipping: no PULUMI_ORG configured");
+            }
+            Err(e) => panic!("unexpected error counting resources: {:?}", e),
+        }
+    }
+
+    #[tokio::test]
     async fn integration_list_organizations() {
         let Some(client) = integration_client() else {
             eprintln!("Skipping integration test: no PULUMI_ACCESS_TOKEN");

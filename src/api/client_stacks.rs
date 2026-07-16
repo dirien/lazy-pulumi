@@ -8,20 +8,34 @@ impl PulumiClient {
     // Stacks API (via generated client)
     // ─────────────────────────────────────────────────────────────
 
-    /// List all stacks
+    /// List all stacks, following pagination (the API returns at most 1000 per call)
     pub async fn list_stacks(&self, org: Option<&str>) -> Result<Vec<Stack>, ApiError> {
         let org = self.org_or_default(org)?;
 
-        let resp = self
-            .gen
-            .list_user_stacks()
-            .organization(org)
-            .send()
-            .await
-            .map_err(map_gen_err)?;
+        let mut all: Vec<Stack> = Vec::new();
+        let mut token: Option<String> = None;
 
-        let data = resp.into_inner();
-        Ok(data.stacks.into_iter().map(Into::into).collect())
+        loop {
+            let mut req = self
+                .gen
+                .list_user_stacks()
+                .organization(org)
+                .max_results(1000);
+            if let Some(ref t) = token {
+                req = req.continuation_token(t);
+            }
+
+            let data = req.send().await.map_err(map_gen_err)?.into_inner();
+            all.extend(data.stacks.into_iter().map(Into::<Stack>::into));
+
+            token = data.continuation_token.filter(|t| !t.is_empty());
+            // ponytail: 100k cap guards against a runaway continuation loop
+            if token.is_none() || all.len() >= 100_000 {
+                break;
+            }
+        }
+
+        Ok(all)
     }
 
     /// Get stack details

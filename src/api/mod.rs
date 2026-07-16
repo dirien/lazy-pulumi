@@ -18,5 +18,5 @@ mod generated;
 pub use client::{ApiError, PulumiClient};
 pub use domain::{
     EscEnvironmentSummary, NeoMessage, NeoMessageType, NeoSlashCommand, NeoTask, OrgStackUpdate,
-    RegistryPackage, RegistryTemplate, Resource, ResourceSummaryPoint, Service, Stack,
+    RegistryPackage, RegistryTemplate, ResourceSummaryPoint, Service, Stack,
 };
