@@ -387,6 +387,9 @@ mod tests {
     /// Helper to create a client from the .env PAT token.
     /// Returns None if no token is available (skips test).
     fn integration_client() -> Option<PulumiClient> {
+        // Hold the env lock so parallel unit tests that temporarily set
+        // fake PULUMI_ACCESS_TOKEN values can't leak into this client.
+        let _lock = ENV_MUTEX.lock().unwrap();
         // Try loading from .env file first
         if let Ok(content) = std::fs::read_to_string(".env") {
             let token = content.lines().next().unwrap_or("").trim();
