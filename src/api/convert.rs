@@ -248,6 +248,7 @@ mod tests {
             .referrer_metadata(referrer_metadata)
             .settings(settings)
             .tags(HashMap::new())
+            .owned_by(make_user_info("owner"))
             .try_into()
             .expect("valid OrgEnvironment")
     }
@@ -279,6 +280,8 @@ mod tests {
             .entities(entities)
             .approval_mode(gen::AgentTaskApprovalMode::Manual)
             .plan_mode(false)
+            .task_type(gen::AgentTaskTaskType::Sync)
+            .tokens_used(0_i64)
             .try_into()
             .expect("valid AgentTask")
     }
@@ -543,6 +546,8 @@ mod tests {
             .shared_at(Some(now))
             .approval_mode(gen::AgentTaskApprovalMode::Manual)
             .plan_mode(false)
+            .task_type(gen::AgentTaskTaskType::Sync)
+            .tokens_used(0_i64)
             .try_into()
             .expect("valid AgentTask");
         let task: domain::NeoTask = gen_task.into();
@@ -867,6 +872,8 @@ mod tests {
             .entities(Vec::<gen::AgentEntity>::new())
             .approval_mode(gen::AgentTaskApprovalMode::Manual)
             .plan_mode(true)
+            .task_type(gen::AgentTaskTaskType::Sync)
+            .tokens_used(0_i64)
             .try_into()
             .expect("valid AgentTask");
         let task: domain::NeoTask = gen_task.into();
