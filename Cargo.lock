@@ -1703,7 +1703,7 @@ dependencies = [
  "portable-pty",
  "prettyplease",
  "progenitor",
- "progenitor-client 0.13.0",
+ "progenitor-client",
  "ratatui",
  "reqwest",
  "serde",
@@ -2412,24 +2412,9 @@ version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8ba1d77160e6d5c95bdf0792527f76bf528791093fa83015bc2908a0ba9d076"
 dependencies = [
- "progenitor-client 0.14.0",
+ "progenitor-client",
  "progenitor-impl",
  "progenitor-macro",
-]
-
-[[package]]
-name = "progenitor-client"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3999c302f5f2a42b7ca1cc39ad9e612c74cf2910ef6e58f869e45f3068b9659f"
-dependencies = [
- "bytes",
- "futures-core",
- "percent-encoding",
- "reqwest",
- "serde",
- "serde_json",
- "serde_urlencoded",
 ]
 
 [[package]]
