@@ -456,15 +456,19 @@ mod tests {
 
     #[test]
     fn settings_with_changed_approval_has_overrides() {
-        let mut s = NeoTaskSettings::default();
-        s.approval_mode = NeoApprovalMode::Auto;
+        let s = NeoTaskSettings {
+            approval_mode: NeoApprovalMode::Auto,
+            ..Default::default()
+        };
         assert!(s.has_overrides());
     }
 
     #[test]
     fn settings_with_plan_mode_on_has_overrides() {
-        let mut s = NeoTaskSettings::default();
-        s.plan_mode = NeoPlanMode::On;
+        let s = NeoTaskSettings {
+            plan_mode: NeoPlanMode::On,
+            ..Default::default()
+        };
         assert!(s.has_overrides());
     }
 }
