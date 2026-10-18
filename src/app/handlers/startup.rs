@@ -85,11 +85,9 @@ impl App {
                 }
             }
             // q quits the application (always available, especially when checks fail)
-            KeyCode::Char('q') => {
-                // Always allow quitting, but especially important when checks fail
-                if checks_failed || checks_complete {
-                    self.should_quit = true;
-                }
+            // Always allow quitting, but especially important when checks fail
+            KeyCode::Char('q') if checks_failed || checks_complete => {
+                self.should_quit = true;
             }
             _ => {}
         }
