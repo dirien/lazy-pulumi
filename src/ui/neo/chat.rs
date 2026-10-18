@@ -325,11 +325,9 @@ pub(super) fn render_chat_view(
 
             // Calculate thumb position and size
             let thumb_height = ((visible_height * visible_height) / total_lines).max(1);
-            let thumb_pos = if max_scroll > 0 {
-                (scrollbar_pos.min(max_scroll) * (visible_height - thumb_height)) / max_scroll
-            } else {
-                0
-            };
+            let thumb_pos = (scrollbar_pos.min(max_scroll) * (visible_height - thumb_height))
+                .checked_div(max_scroll)
+                .unwrap_or(0);
 
             // Draw scrollbar track and thumb (using Violet for on-brand look)
             for y in 0..messages_inner.height {

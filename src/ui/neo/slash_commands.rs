@@ -285,11 +285,9 @@ fn render_slash_command_detail(
         );
 
         let thumb_height = ((visible_height * visible_height) / total_lines).max(1);
-        let thumb_pos = if max_scroll > 0 {
-            (scroll_y as usize * (visible_height - thumb_height)) / max_scroll
-        } else {
-            0
-        };
+        let thumb_pos = (scroll_y as usize * (visible_height - thumb_height))
+            .checked_div(max_scroll)
+            .unwrap_or(0);
 
         for y in 0..chunks[0].height {
             let y_pos = scrollbar_area.y + y;
@@ -574,7 +572,7 @@ fn render_slash_command_delete_confirm(
         ]),
         Line::from(""),
         Line::from(Span::styled(
-            format!("  {}", &cmd.description),
+            format!("  {}", cmd.description),
             theme.text_muted(),
         )),
         Line::from(""),
