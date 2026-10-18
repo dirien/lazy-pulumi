@@ -1,9 +1,12 @@
 //! Splash screen rendering
 //!
 //! Displays the Pulumi logo with "Lazy Pulumi" title and startup checklist.
-//! The logo scales to fit the terminal while maintaining aspect ratio.
+//! The logo is drawn as pixel art with half-block characters (two square pixels
+//! per terminal cell) and scales to fit the terminal while keeping its aspect
+//! ratio. When there is too little room for a legible wordmark, only the cube
+//! mark is drawn.
 
-use image::{DynamicImage, GenericImageView, Rgba};
+use image::{imageops, RgbaImage};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout},
     prelude::*,
@@ -22,61 +25,120 @@ const VERSION: &str = match option_env!("APP_VERSION") {
     None => env!("CARGO_PKG_VERSION"),
 };
 
+/// Width of the cube mark in the source image (the wordmark starts at x=145)
+const MARK_WIDTH: u32 = 100;
+
+/// Below this pixel height the wordmark strokes are unreadable, so only the mark is drawn
+const MIN_WORDMARK_PX_HEIGHT: u32 = 20;
+
+/// Below this pixel height even the mark is unrecognizable, so no logo is drawn
+const MIN_MARK_PX_HEIGHT: u32 = 6;
+
+/// Upper bound for the logo height in terminal rows
+const MAX_LOGO_ROWS: u16 = 14;
+
 /// Cached original image
-static IMAGE_CACHE: OnceLock<DynamicImage> = OnceLock::new();
+static IMAGE_CACHE: OnceLock<RgbaImage> = OnceLock::new();
 
 /// Load the original image (cached)
-fn get_image() -> &'static DynamicImage {
+fn get_image() -> &'static RgbaImage {
     IMAGE_CACHE.get_or_init(|| {
         let image_bytes = include_bytes!("../../assets/logo-on-black.png");
-        image::load_from_memory(image_bytes).expect("Failed to load embedded Pulumi logo")
+        image::load_from_memory(image_bytes)
+            .expect("Failed to load embedded Pulumi logo")
+            .to_rgba8()
     })
 }
 
-/// Convert image to pixel color grid at specified dimensions
-fn image_to_pixels(
-    img: &DynamicImage,
-    target_width: u32,
-    target_height: u32,
-) -> Vec<Vec<Option<Color>>> {
-    // Use resize_exact to get exact dimensions we want
-    let resized = img.resize_exact(
-        target_width,
-        target_height,
-        image::imageops::FilterType::Lanczos3,
-    );
+/// Pixel grid; `None` is a transparent pixel
+type PixelGrid = Vec<Vec<Option<Color>>>;
 
-    let (actual_width, actual_height) = resized.dimensions();
-    let mut pixels = Vec::with_capacity(actual_height as usize);
-
-    for y in 0..actual_height {
-        let mut row = Vec::with_capacity(actual_width as usize);
-        for x in 0..actual_width {
-            let pixel = resized.get_pixel(x, y);
-            let color = rgba_to_color(pixel);
-            row.push(color);
-        }
-        pixels.push(row);
-    }
-
-    pixels
+/// Which part of the logo to draw and at what size (in pixels)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct LogoFit {
+    /// Columns of the source image to use (full image or mark only)
+    crop_width: u32,
+    width: u32,
+    height: u32,
 }
 
-/// Convert RGBA pixel to ratatui Color, returns None for transparent or black pixels
-fn rgba_to_color(pixel: Rgba<u8>) -> Option<Color> {
-    let [r, g, b, a] = pixel.0;
+/// Pick the largest logo variant that fits in `max_cols` x `max_rows` cells.
+///
+/// Each cell holds two vertically stacked pixels, so pixels are square.
+fn fit_logo(src_width: u32, src_height: u32, max_cols: u16, max_rows: u16) -> Option<LogoFit> {
+    let max_px_height = 2 * u32::from(max_rows.min(MAX_LOGO_ROWS));
+    let max_px_width = u32::from(max_cols);
 
-    // Skip transparent pixels
-    if a < 128 {
-        return None;
+    let fit = |crop_width: u32| {
+        let height = max_px_height.min(max_px_width * src_height / crop_width);
+        let width = (crop_width * height).div_ceil(src_height).min(max_px_width);
+        LogoFit {
+            crop_width,
+            width,
+            height,
+        }
+    };
+
+    let full = fit(src_width);
+    if full.height >= MIN_WORDMARK_PX_HEIGHT {
+        return Some(full);
     }
+    let mark = fit(MARK_WIDTH.min(src_width));
+    (mark.height >= MIN_MARK_PX_HEIGHT).then_some(mark)
+}
 
-    // Skip black/near-black pixels (the background)
-    if r < 20 && g < 20 && b < 20 {
-        return None;
+/// Downscale with area averaging in premultiplied alpha.
+///
+/// Every target pixel averages the source pixels it covers, so thin strokes and
+/// anti-aliased edges keep their real color instead of ringing (Lanczos) or
+/// fading into the background. A pixel is drawn when at least half of its area
+/// is covered.
+fn downsample(img: &RgbaImage, width: u32, height: u32) -> PixelGrid {
+    let (src_width, src_height) = img.dimensions();
+    let span = |i: u32, target: u32, source: u32| {
+        let start = i * source / target;
+        let end = ((i + 1) * source / target).max(start + 1).min(source);
+        start..end
+    };
+
+    (0..height)
+        .map(|ty| {
+            let ys = span(ty, height, src_height);
+            (0..width)
+                .map(|tx| {
+                    let xs = span(tx, width, src_width);
+                    let (mut r, mut g, mut b, mut a) = (0u64, 0u64, 0u64, 0u64);
+                    for y in ys.clone() {
+                        for x in xs.clone() {
+                            let [pr, pg, pb, pa] = img.get_pixel(x, y).0;
+                            let pa = u64::from(pa);
+                            r += u64::from(pr) * pa;
+                            g += u64::from(pg) * pa;
+                            b += u64::from(pb) * pa;
+                            a += pa;
+                        }
+                    }
+                    let area = (xs.len() * ys.len()) as u64;
+                    if a == 0 || a * 2 < area * 255 {
+                        return None;
+                    }
+                    Some(Color::Rgb((r / a) as u8, (g / a) as u8, (b / a) as u8))
+                })
+                .collect()
+        })
+        .collect()
+}
+
+/// Render the logo pixels for the available area, or `None` if it doesn't fit
+fn logo_pixels(max_cols: u16, max_rows: u16) -> Option<PixelGrid> {
+    let img = get_image();
+    let fit = fit_logo(img.width(), img.height(), max_cols, max_rows)?;
+    if fit.crop_width == img.width() {
+        Some(downsample(img, fit.width, fit.height))
+    } else {
+        let mark = imageops::crop_imm(img, 0, 0, fit.crop_width, img.height()).to_image();
+        Some(downsample(&mark, fit.width, fit.height))
     }
-
-    Some(Color::Rgb(r, g, b))
 }
 
 /// Render the splash screen with startup checklist
@@ -88,61 +150,37 @@ pub fn render_splash(
     checks: &StartupChecks,
 ) {
     let area = frame.area();
-    let img = get_image();
 
-    // Reserve space for title, version, checklist, action hint, checkbox, and spacing
+    // Fixed-height content below the logo
     let title_height: u16 = 1;
     let version_height: u16 = 1;
     let checklist_height: u16 = 4; // 2 checks with status
     let action_height: u16 = 2;
     let checkbox_height: u16 = 3;
-    let spacing: u16 = 10; // Total spacing between elements
-    let reserved_height = title_height
-        + version_height
-        + checklist_height
-        + action_height
-        + checkbox_height
-        + spacing;
+    let content_height =
+        title_height + version_height + checklist_height + action_height + checkbox_height;
 
-    // Calculate available space for the logo
-    let available_height = area.height.saturating_sub(reserved_height);
-    let available_width = area.width.saturating_sub(4); // Leave some margin
-
-    // Get original image dimensions (425x106 - wide logo)
-    let (orig_width, orig_height) = img.dimensions();
-    let image_aspect = orig_width as f32 / orig_height as f32; // ~4:1
-
-    // Terminal characters are typically about 2:1 height to width ratio
-    // To maintain visual aspect ratio: visual_width / visual_height = image_aspect
-    // Since terminal chars are 2x tall: pixel_width / pixel_height = image_aspect * 2
-
-    let effective_aspect = image_aspect * 2.0;
-
-    // Calculate dimensions to fit available space
-    let max_height = available_height.min(25) as f32; // Cap height for this wide logo
-    let max_width = available_width as f32;
-
-    // Try using max height first
-    let width_for_height = max_height * effective_aspect;
-
-    let (final_width, final_height) = if width_for_height <= max_width {
-        // Height is limiting
-        (width_for_height as u32, max_height as u32)
+    // Gaps after: logo, title, version, checklist, action hint.
+    // Tighten them on short terminals so the logo keeps some room.
+    let roomy_gaps = [2, 1, 2, 2, 2];
+    let compact_gaps = [1, 0, 1, 1, 1];
+    let roomy_height = content_height + roomy_gaps.iter().sum::<u16>();
+    let gaps = if area.height >= roomy_height + MAX_LOGO_ROWS / 2 {
+        roomy_gaps
     } else {
-        // Width is limiting
-        let h = max_width / effective_aspect;
-        (max_width as u32, h as u32)
+        compact_gaps
     };
+    let reserved_height = content_height + gaps.iter().sum::<u16>();
 
-    // Ensure minimum size
-    let final_width = final_width.max(60);
-    let final_height = final_height.max(8);
+    let logo = logo_pixels(
+        area.width.saturating_sub(4), // Leave some margin
+        area.height.saturating_sub(reserved_height),
+    );
+    let logo_lines = logo.as_deref().map(pixels_to_lines).unwrap_or_default();
+    let logo_height = logo_lines.len() as u16;
+    let logo_gap = if logo_height > 0 { gaps[0] } else { 0 };
 
-    // Generate pixel art at calculated dimensions
-    let pixels = image_to_pixels(img, final_width, final_height);
-    let pixel_height = pixels.len() as u16;
-
-    let total_content_height = pixel_height + reserved_height;
+    let total_content_height = logo_height + logo_gap + reserved_height - gaps[0];
 
     // Center everything vertically
     let vertical_padding = area.height.saturating_sub(total_content_height) / 2;
@@ -151,27 +189,25 @@ pub fn render_splash(
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(vertical_padding),
-            Constraint::Length(pixel_height),
-            Constraint::Length(2), // spacing
+            Constraint::Length(logo_height),
+            Constraint::Length(logo_gap),
             Constraint::Length(title_height),
-            Constraint::Length(1), // spacing
+            Constraint::Length(gaps[1]),
             Constraint::Length(version_height),
-            Constraint::Length(2), // spacing
+            Constraint::Length(gaps[2]),
             Constraint::Length(checklist_height),
-            Constraint::Length(2), // spacing
+            Constraint::Length(gaps[3]),
             Constraint::Length(action_height),
-            Constraint::Length(2), // spacing
+            Constraint::Length(gaps[4]),
             Constraint::Length(checkbox_height),
             Constraint::Min(0),
         ])
         .split(area);
 
     // Render logo
-    let pixel_lines: Vec<Line> = pixels.iter().map(|row| pixels_to_line(row)).collect();
+    let logo_paragraph = Paragraph::new(logo_lines).alignment(Alignment::Center);
 
-    let pixel_paragraph = Paragraph::new(pixel_lines).alignment(Alignment::Center);
-
-    frame.render_widget(pixel_paragraph, chunks[1]);
+    frame.render_widget(logo_paragraph, chunks[1]);
 
     // Render title - use Pulumi Violet for brand consistency
     let title_line = Line::from(vec![Span::styled(
@@ -187,7 +223,7 @@ pub fn render_splash(
 
     // Render version
     let version_line = Line::from(vec![Span::styled(
-        format!("v{}", VERSION),
+        format!("v{}", VERSION.trim_start_matches('v')),
         Style::default().fg(theme.text_muted),
     )]);
 
@@ -352,39 +388,160 @@ fn render_action_hint(theme: &Theme, checks: &StartupChecks) -> Vec<Line<'static
     }
 }
 
-/// Convert a row of pixels to a Line with colored spans
-fn pixels_to_line(row: &[Option<Color>]) -> Line<'static> {
-    let mut spans: Vec<Span<'static>> = Vec::new();
-    let mut current_color: Option<Option<Color>> = None;
-    let mut current_chars = String::new();
+/// Convert a pixel grid to lines using half-block characters.
+///
+/// Each cell shows two pixels: `▀` with the top pixel as foreground and the
+/// bottom pixel as background. Runs of identical cells are merged into one span.
+fn pixels_to_lines(pixels: &[Vec<Option<Color>>]) -> Vec<Line<'static>> {
+    pixels
+        .chunks(2)
+        .map(|pair| {
+            let top = &pair[0];
+            let bottom = pair.get(1);
+            let mut spans: Vec<Span<'static>> = Vec::new();
+            let mut run = String::new();
+            let mut run_style = Style::default();
 
-    for &pixel_color in row {
-        if current_color != Some(pixel_color) {
-            // Flush current buffer
-            if !current_chars.is_empty() {
-                let style = match current_color.flatten() {
-                    Some(color) => Style::default().fg(color),
-                    None => Style::default(),
+            for (x, &upper) in top.iter().enumerate() {
+                let lower = bottom.and_then(|row| row.get(x).copied().flatten());
+                let (ch, style) = match (upper, lower) {
+                    (None, None) => (' ', Style::default()),
+                    (Some(t), None) => ('▀', Style::default().fg(t)),
+                    (None, Some(b)) => ('▄', Style::default().fg(b)),
+                    (Some(t), Some(b)) => ('▀', Style::default().fg(t).bg(b)),
                 };
-                spans.push(Span::styled(std::mem::take(&mut current_chars), style));
+                if style != run_style && !run.is_empty() {
+                    spans.push(Span::styled(std::mem::take(&mut run), run_style));
+                }
+                run_style = style;
+                run.push(ch);
             }
-            current_color = Some(pixel_color);
+            if !run.is_empty() {
+                spans.push(Span::styled(run, run_style));
+            }
+            Line::from(spans)
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use image::Rgba;
+
+    const RED: Color = Color::Rgb(255, 0, 0);
+    const BLUE: Color = Color::Rgb(0, 0, 255);
+
+    #[test]
+    fn fit_logo_uses_full_logo_when_tall_enough() {
+        let fit = fit_logo(425, 106, 200, 40).expect("logo should fit");
+        assert_eq!(fit.crop_width, 425);
+        assert_eq!(fit.height, 2 * u32::from(MAX_LOGO_ROWS));
+        assert!(fit.width <= 200);
+    }
+
+    #[test]
+    fn fit_logo_is_width_limited_on_narrow_terminals() {
+        let fit = fit_logo(425, 106, 100, 40).expect("logo should fit");
+        assert_eq!(fit.crop_width, 425);
+        assert!(fit.width <= 100);
+        assert_eq!(fit.height, 100 * 106 / 425);
+    }
+
+    #[test]
+    fn fit_logo_falls_back_to_mark_on_short_terminals() {
+        let fit = fit_logo(425, 106, 120, 8).expect("mark should fit");
+        assert_eq!(fit.crop_width, MARK_WIDTH);
+        assert_eq!(fit.height, 16);
+    }
+
+    #[test]
+    fn fit_logo_hides_logo_when_too_small() {
+        assert_eq!(fit_logo(425, 106, 120, 2), None);
+        assert_eq!(fit_logo(425, 106, 3, 20), None);
+    }
+
+    #[test]
+    fn downsample_uses_coverage_and_keeps_color() {
+        // 4x2 image: left half opaque red, right half transparent
+        let img = RgbaImage::from_fn(4, 2, |x, _| {
+            if x < 2 {
+                Rgba([255, 0, 0, 255])
+            } else {
+                Rgba([0, 0, 0, 0])
+            }
+        });
+        assert_eq!(downsample(&img, 2, 1), vec![vec![Some(RED), None]]);
+    }
+
+    #[test]
+    fn downsample_ignores_color_of_transparent_pixels() {
+        // Three opaque red pixels and one transparent white pixel stay pure red
+        let img = RgbaImage::from_fn(2, 2, |x, y| {
+            if x == 1 && y == 1 {
+                Rgba([255, 255, 255, 0])
+            } else {
+                Rgba([255, 0, 0, 255])
+            }
+        });
+        assert_eq!(downsample(&img, 1, 1), vec![vec![Some(RED)]]);
+    }
+
+    #[test]
+    fn downsample_drops_mostly_transparent_pixels() {
+        let img = RgbaImage::from_fn(2, 2, |x, y| {
+            if x == 0 && y == 0 {
+                Rgba([255, 0, 0, 255])
+            } else {
+                Rgba([0, 0, 0, 0])
+            }
+        });
+        assert_eq!(downsample(&img, 1, 1), vec![vec![None]]);
+    }
+
+    #[test]
+    fn pixels_to_lines_packs_two_rows_per_line() {
+        let pixels = vec![
+            vec![Some(RED), None, Some(RED), None],
+            vec![Some(BLUE), Some(BLUE), None, None],
+            vec![Some(RED), None, None, None],
+        ];
+        let lines = pixels_to_lines(&pixels);
+        assert_eq!(lines.len(), 2);
+
+        let first: Vec<(String, Style)> = lines[0]
+            .spans
+            .iter()
+            .map(|s| (s.content.to_string(), s.style))
+            .collect();
+        assert_eq!(
+            first,
+            vec![
+                ("▀".to_string(), Style::default().fg(RED).bg(BLUE)),
+                ("▄".to_string(), Style::default().fg(BLUE)),
+                ("▀".to_string(), Style::default().fg(RED)),
+                (" ".to_string(), Style::default()),
+            ]
+        );
+        // Odd final row renders as top halves only
+        assert_eq!(lines[1].spans[0].content, "▀");
+    }
+
+    #[test]
+    fn pixels_to_lines_merges_identical_cells() {
+        let pixels = vec![vec![Some(RED); 5], vec![Some(RED); 5]];
+        let lines = pixels_to_lines(&pixels);
+        assert_eq!(lines[0].spans.len(), 1);
+        assert_eq!(lines[0].spans[0].content, "▀▀▀▀▀");
+    }
+
+    #[test]
+    fn logo_renders_at_common_sizes() {
+        for (cols, rows) in [(80, 4), (120, 8), (200, 30)] {
+            let pixels = logo_pixels(cols, rows).expect("logo should render");
+            assert!(pixels.len() <= 2 * usize::from(rows));
+            assert!(pixels.iter().all(|row| row.len() <= usize::from(cols)));
+            assert!(pixels.iter().flatten().any(Option::is_some));
         }
-
-        // Use block characters for pixels
-        // █ (full block) for colored pixels, space for transparent
-        let ch = if pixel_color.is_some() { '█' } else { ' ' };
-        current_chars.push(ch);
     }
-
-    // Flush remaining
-    if !current_chars.is_empty() {
-        let style = match current_color.flatten() {
-            Some(color) => Style::default().fg(color),
-            None => Style::default(),
-        };
-        spans.push(Span::styled(current_chars, style));
-    }
-
-    Line::from(spans)
 }
