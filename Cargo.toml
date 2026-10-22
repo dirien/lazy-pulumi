@@ -57,7 +57,7 @@ tui-markdown = "0.3.7"
 progenitor = "0.14"
 serde_json = "1"
 openapiv3 = "2"
-syn = "2"
+syn = "3"
 prettyplease = "0.2"
 
 [profile.release]
